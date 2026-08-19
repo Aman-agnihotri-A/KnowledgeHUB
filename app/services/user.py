@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.models.enums import UserRole
 from app.models.user import User
 from app.repositories.user import UserRepository
+from app.core.security import hash_password,verify_password
 
 
 class UserService:
@@ -19,7 +20,7 @@ class UserService:
         db: Session,
         *,
         email: str,
-        hashed_password: str,
+        password: str,
         full_name: str,
         role: UserRole,
         tenant_id: uuid.UUID | None = None,
@@ -47,7 +48,7 @@ class UserService:
         return self.repository.create(
             db,
             email=email,
-            hashed_password=hashed_password,
+            hashed_password=hash_password(password),
             full_name=full_name,
             role=role,
             tenant_id=tenant_id,
@@ -92,3 +93,28 @@ class UserService:
             db,
             tenant_id,
         )
+    def authenticate_user(
+        self,
+        db: Session,
+        *,
+        email: str,
+        password: str,
+    ) -> User | None:
+        user = self.repository.get_by_email(
+            db,
+            email,
+        )
+
+        if user is None:
+            return None
+
+        if not user.is_active:
+            return None
+
+        if not verify_password(
+            password,
+            user.hashed_password,
+        ):
+            return None
+
+        return user

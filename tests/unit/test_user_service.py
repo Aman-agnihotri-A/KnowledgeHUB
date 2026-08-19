@@ -6,6 +6,7 @@ import pytest
 from app.models.enums import UserRole
 from app.models.user import User
 from app.services.user import UserService
+from app.core.security import hash_password, verify_password
 
 
 def test_create_super_admin_without_tenant():
@@ -15,7 +16,7 @@ def test_create_super_admin_without_tenant():
 
     user = User(
         email="admin@example.com",
-        hashed_password="hashed-password",
+        hashed_password=hash_password("password"),
         full_name="Super Admin",
         role=UserRole.SUPER_ADMIN,
     )
@@ -26,7 +27,7 @@ def test_create_super_admin_without_tenant():
     result = service.create_user(
         db,
         email="admin@example.com",
-        hashed_password="hashed-password",
+        password="password",
         full_name="Super Admin",
         role=UserRole.SUPER_ADMIN,
     )
@@ -38,13 +39,18 @@ def test_create_super_admin_without_tenant():
         "admin@example.com",
     )
 
-    repository.create.assert_called_once_with(
-        db,
-        email="admin@example.com",
-        hashed_password="hashed-password",
-        full_name="Super Admin",
-        role=UserRole.SUPER_ADMIN,
-        tenant_id=None,
+    repository.create.assert_called_once()
+
+    call_kwargs = repository.create.call_args.kwargs
+
+    assert call_kwargs["email"] == "admin@example.com"
+    assert call_kwargs["full_name"] == "Super Admin"
+    assert call_kwargs["role"] == UserRole.SUPER_ADMIN
+    assert call_kwargs["tenant_id"] is None
+
+    assert verify_password(
+        "password",
+        call_kwargs["hashed_password"],
     )
 
 
@@ -62,7 +68,7 @@ def test_create_tenant_admin_requires_tenant():
         service.create_user(
             db,
             email="admin@example.com",
-            hashed_password="hashed-password",
+            password="password",
             full_name="Tenant Admin",
             role=UserRole.TENANT_ADMIN,
         )
@@ -84,7 +90,7 @@ def test_create_sub_user_requires_tenant():
         service.create_user(
             db,
             email="user@example.com",
-            hashed_password="hashed-password",
+            password="password",
             full_name="Sub User",
             role=UserRole.SUB_USER,
         )
@@ -108,7 +114,7 @@ def test_super_admin_cannot_belong_to_tenant():
         service.create_user(
             db,
             email="admin@example.com",
-            hashed_password="hashed-password",
+            password="password",
             full_name="Super Admin",
             role=UserRole.SUPER_ADMIN,
             tenant_id=tenant_id,
@@ -126,7 +132,7 @@ def test_create_tenant_admin():
 
     user = User(
         email="admin@example.com",
-        hashed_password="hashed-password",
+        hashed_password=hash_password("password"),
         full_name="Tenant Admin",
         role=UserRole.TENANT_ADMIN,
         tenant_id=tenant_id,
@@ -138,7 +144,7 @@ def test_create_tenant_admin():
     result = service.create_user(
         db,
         email="admin@example.com",
-        hashed_password="hashed-password",
+        password="password",
         full_name="Tenant Admin",
         role=UserRole.TENANT_ADMIN,
         tenant_id=tenant_id,
@@ -146,13 +152,18 @@ def test_create_tenant_admin():
 
     assert result is user
 
-    repository.create.assert_called_once_with(
-        db,
-        email="admin@example.com",
-        hashed_password="hashed-password",
-        full_name="Tenant Admin",
-        role=UserRole.TENANT_ADMIN,
-        tenant_id=tenant_id,
+    repository.create.assert_called_once()
+
+    call_kwargs = repository.create.call_args.kwargs
+
+    assert call_kwargs["email"] == "admin@example.com"
+    assert call_kwargs["full_name"] == "Tenant Admin"
+    assert call_kwargs["role"] == UserRole.TENANT_ADMIN
+    assert call_kwargs["tenant_id"] == tenant_id
+
+    assert verify_password(
+        "password",
+        call_kwargs["hashed_password"],
     )
 
 
@@ -163,7 +174,7 @@ def test_create_user_rejects_duplicate_email():
 
     existing_user = User(
         email="existing@example.com",
-        hashed_password="hashed-password",
+        hashed_password=hash_password("password"),
         full_name="Existing User",
         role=UserRole.SUB_USER,
         tenant_id=uuid4(),
@@ -178,7 +189,7 @@ def test_create_user_rejects_duplicate_email():
         service.create_user(
             db,
             email="existing@example.com",
-            hashed_password="hashed-password",
+            password="password",
             full_name="Another User",
             role=UserRole.SUB_USER,
             tenant_id=uuid4(),
@@ -196,7 +207,7 @@ def test_get_user():
 
     user = User(
         email="user@example.com",
-        hashed_password="hashed-password",
+        hashed_password=hash_password("password"),
         full_name="Test User",
         role=UserRole.SUB_USER,
         tenant_id=uuid4(),
@@ -224,7 +235,7 @@ def test_get_user_by_email():
 
     user = User(
         email="user@example.com",
-        hashed_password="hashed-password",
+        hashed_password=hash_password("password"),
         full_name="Test User",
         role=UserRole.SUB_USER,
         tenant_id=uuid4(),
@@ -255,14 +266,14 @@ def test_list_tenant_users():
     users = [
         User(
             email="one@example.com",
-            hashed_password="hashed-password",
+            hashed_password=hash_password("password"),
             full_name="User One",
             role=UserRole.SUB_USER,
             tenant_id=tenant_id,
         ),
         User(
             email="two@example.com",
-            hashed_password="hashed-password",
+            hashed_password=hash_password("password"),
             full_name="User Two",
             role=UserRole.SUB_USER,
             tenant_id=tenant_id,
@@ -294,7 +305,7 @@ def test_list_active_tenant_users():
     users = [
         User(
             email="active@example.com",
-            hashed_password="hashed-password",
+            hashed_password=hash_password("password"),
             full_name="Active User",
             role=UserRole.SUB_USER,
             tenant_id=tenant_id,
@@ -315,3 +326,73 @@ def test_list_active_tenant_users():
         db,
         tenant_id,
     )
+
+def test_authenticate_user():
+    db = MagicMock()
+    repository = MagicMock()
+
+    service = UserService(repository=repository)
+
+    user = User(
+        email="user@example.com",
+        hashed_password=hash_password("password"),
+        full_name="Test User",
+        role=UserRole.SUB_USER,
+        tenant_id=uuid4(),
+        is_active=True,
+    )
+
+    repository.get_by_email.return_value = user
+
+    result = service.authenticate_user(
+        db,
+        email="user@example.com",
+        password="password",
+    )
+
+    assert result is user
+
+    repository.get_by_email.assert_called_once_with(
+        db,
+        "user@example.com",
+    )
+def test_authenticate_user_rejects_unknown_user():
+    db = MagicMock()
+    repository = MagicMock()
+
+    service = UserService(repository=repository)
+
+    repository.get_by_email.return_value = None
+
+    result = service.authenticate_user(
+        db,
+        email="unknown@example.com",
+        password="password",
+    )
+
+    assert result is None
+
+def test_authenticate_user_rejects_inactive_user():
+    db = MagicMock()
+    repository = MagicMock()
+
+    service = UserService(repository=repository)
+
+    user = User(
+        email="user@example.com",
+        hashed_password=hash_password("correct-password"),
+        full_name="Test User",
+        role=UserRole.SUB_USER,
+        tenant_id=uuid4(),
+        is_active=False,
+    )
+
+    repository.get_by_email.return_value = user
+
+    result = service.authenticate_user(
+        db,
+        email="user@example.com",
+        password="correct-password",
+    )
+
+    assert result is None
