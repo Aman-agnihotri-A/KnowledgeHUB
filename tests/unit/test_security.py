@@ -1,3 +1,8 @@
+import jwt
+
+from app.core.config import settings
+from app.core.security import create_access_token
+
 from app.core.security import hash_password, verify_password
 
 
@@ -38,3 +43,56 @@ def test_same_password_generates_different_hashes():
     second_hash = hash_password(password)
 
     assert first_hash != second_hash
+
+def test_create_access_token_contains_expected_claims():
+    token = create_access_token(
+        user_id="123",
+        role="sub_user",
+        tenant_id="456",
+    )
+
+    payload = jwt.decode(
+        token,
+        settings.jwt_secret_key,
+        algorithms=[settings.jwt_algorithm],
+    )
+
+    assert payload["sub"] == "123"
+    assert payload["role"] == "sub_user"
+    assert payload["tenant_id"] == "456"
+    assert "iat" in payload
+    assert "exp" in payload
+
+
+def test_create_access_token_supports_super_admin_without_tenant():
+    token = create_access_token(
+        user_id="123",
+        role="super_admin",
+        tenant_id=None,
+    )
+
+    payload = jwt.decode(
+        token,
+        settings.jwt_secret_key,
+        algorithms=[settings.jwt_algorithm],
+    )
+
+    assert payload["sub"] == "123"
+    assert payload["role"] == "super_admin"
+    assert payload["tenant_id"] is None
+
+
+def test_access_token_has_expiration():
+    token = create_access_token(
+        user_id="123",
+        role="sub_user",
+        tenant_id="456",
+    )
+
+    payload = jwt.decode(
+        token,
+        settings.jwt_secret_key,
+        algorithms=[settings.jwt_algorithm],
+    )
+
+    assert payload["exp"] > payload["iat"]
