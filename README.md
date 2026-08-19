@@ -2,14 +2,24 @@
 
 A multi-tenant AI-powered knowledge-assistance platform.
 
-## Sprint 1
-Engineering foundation: FastAPI, configuration, database layer,
-health endpoint, testing, Docker, and CI.
+## Project Status
 
-The RAG implementation comes later.
+KnowledgeHub is being developed incrementally using production-oriented
+software engineering practices.
 
-## Request flow
-Browser → API → Services → Repositories → Database
+### Completed Sprints
 
-AI flow later:
-Browser → API → Chat Service → RAG → Retrieval/Vector Store → LLM → API
+- **KH-001 → KH-008** — Engineering foundation, database connectivity,
+  PostgreSQL test infrastructure, automated testing, Docker and GitHub CI.
+- **KH-009** — Core domain model and relational data model.
+
+## KH-009 — Core Domain Model
+
+The initial domain model establishes the tenant isolation boundary and the
+relationships required for document-based knowledge assistance.
+
+```text
+Tenant
+├── Users
+└── Documents
+    └── DocumentChunks

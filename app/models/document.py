@@ -17,9 +17,10 @@ class Document(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         index=True,
     )
 
-    uploaded_by : Mapped[uuid.UUID] = mapped_column(
+    uploaded_by: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
     )
 
     filename: Mapped[str] = mapped_column(
@@ -40,6 +41,10 @@ class Document(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     tenant: Mapped["Tenant"] = relationship(
         back_populates="documents",
+    )
+
+    uploaded_by_user: Mapped["User"] = relationship(
+        back_populates="uploaded_documents",
     )
 
     chunks: Mapped[list["DocumentChunk"]] = relationship(

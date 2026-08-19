@@ -1,0 +1,251 @@
+import uuid
+
+import pytest
+from sqlalchemy.exc import IntegrityError
+
+from app.db import engine
+from app.models import (
+    Base,
+    Document,
+    DocumentChunk,
+    DocumentStatus,
+    Tenant,
+    User,
+    UserRole,
+)
+
+
+@pytest.fixture(autouse=True)
+def database_schema():
+    Base.metadata.create_all(bind=engine)
+
+    try:
+        yield
+    finally:
+        Base.metadata.drop_all(bind=engine)
+
+
+def test_domain_models_can_be_persisted() -> None:
+    from sqlalchemy.orm import Session
+
+    tenant = Tenant(
+        name="Acme Corporation",
+        slug="acme",
+    )
+
+    with Session(engine) as session:
+        session.add(tenant)
+        session.flush()
+
+        user = User(
+            tenant_id=tenant.id,
+            email="admin@acme.example",
+            hashed_password="hashed-password",
+            full_name="Acme Admin",
+            role=UserRole.TENANT_ADMIN,
+        )
+
+        session.add(user)
+        session.flush()
+
+        document = Document(
+            tenant_id=tenant.id,
+            uploaded_by=user.id,
+            filename="handbook.pdf",
+            storage_path="documents/acme/handbook.pdf",
+        )
+
+        session.add(document)
+        session.flush()
+
+        chunk = DocumentChunk(
+            document_id=document.id,
+            chunk_index=0,
+            content="KnowledgeHub test content.",
+        )
+
+        session.add(chunk)
+        session.commit()
+
+        assert tenant.id is not None
+        assert user.id is not None
+        assert document.id is not None
+        assert chunk.id is not None
+
+
+def test_document_chunk_index_must_be_unique_per_document() -> None:
+    from sqlalchemy.orm import Session
+
+    tenant = Tenant(
+        name="Acme Corporation",
+        slug="acme",
+    )
+
+    with Session(engine) as session:
+        session.add(tenant)
+        session.flush()
+
+        user = User(
+            tenant_id=tenant.id,
+            email="admin@acme.example",
+            hashed_password="hashed-password",
+            full_name="Acme Admin",
+            role=UserRole.TENANT_ADMIN,
+        )
+
+        session.add(user)
+        session.flush()
+
+        document = Document(
+            tenant_id=tenant.id,
+            uploaded_by=user.id,
+            filename="handbook.pdf",
+            storage_path="documents/acme/handbook.pdf",
+            status=DocumentStatus.UPLOADED,
+        )
+
+        session.add(document)
+        session.flush()
+
+        session.add_all(
+            [
+                DocumentChunk(
+                    document_id=document.id,
+                    chunk_index=0,
+                    content="First chunk",
+                ),
+                DocumentChunk(
+                    document_id=document.id,
+                    chunk_index=0,
+                    content="Duplicate chunk index",
+                ),
+            ]
+        )
+
+        with pytest.raises(IntegrityError):
+            session.commit()
+
+
+def test_same_chunk_index_is_allowed_for_different_documents() -> None:
+    from sqlalchemy.orm import Session
+
+    tenant = Tenant(
+        name="Acme Corporation",
+        slug="acme",
+    )
+
+    with Session(engine) as session:
+        session.add(tenant)
+        session.flush()
+
+        user = User(
+            tenant_id=tenant.id,
+            email="admin@acme.example",
+            hashed_password="hashed-password",
+            full_name="Acme Admin",
+            role=UserRole.TENANT_ADMIN,
+        )
+
+        session.add(user)
+        session.flush()
+
+        documents = [
+            Document(
+                tenant_id=tenant.id,
+                uploaded_by=user.id,
+                filename=f"document-{index}.pdf",
+                storage_path=f"documents/acme/document-{index}.pdf",
+            )
+            for index in range(2)
+        ]
+
+        session.add_all(documents)
+        session.flush()
+
+        session.add_all(
+            [
+                DocumentChunk(
+                    document_id=documents[0].id,
+                    chunk_index=0,
+                    content="Document one chunk",
+                ),
+                DocumentChunk(
+                    document_id=documents[1].id,
+                    chunk_index=0,
+                    content="Document two chunk",
+                ),
+            ]
+        )
+
+        session.commit()
+
+        assert documents[0].id != documents[1].id
+
+
+def test_tenant_can_be_deleted_with_children() -> None:
+    from sqlalchemy.orm import Session
+
+    tenant = Tenant(
+        name="Delete Me",
+        slug="delete-me",
+    )
+
+    with Session(engine) as session:
+        session.add(tenant)
+        session.flush()
+
+        user = User(
+            tenant_id=tenant.id,
+            email="admin@delete-me.example",
+            hashed_password="hashed-password",
+            full_name="Delete Me Admin",
+            role=UserRole.TENANT_ADMIN,
+        )
+
+        session.add(user)
+        session.flush()
+
+        document = Document(
+            tenant_id=tenant.id,
+            uploaded_by=user.id,
+            filename="delete.pdf",
+            storage_path="documents/delete.pdf",
+        )
+
+        session.add(document)
+        session.flush()
+
+        session.add(
+            DocumentChunk(
+                document_id=document.id,
+                chunk_index=0,
+                content="Delete me",
+            )
+        )
+
+        session.commit()
+
+        tenant_id = tenant.id
+
+        session.delete(tenant)
+        session.commit()
+
+        assert (
+            session.get(Tenant, tenant_id)
+            is None
+        )
+
+
+def test_uuid_primary_keys_are_generated() -> None:
+    from sqlalchemy.orm import Session
+
+    tenant = Tenant(
+        name="UUID Test",
+        slug=f"uuid-{uuid.uuid4()}",
+    )
+
+    with Session(engine) as session:
+        session.add(tenant)
+        session.commit()
+
+        assert isinstance(tenant.id, uuid.UUID)

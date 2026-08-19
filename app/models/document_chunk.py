@@ -1,12 +1,21 @@
 import uuid
 
-from sqlalchemy import ForeignKey, Integer, Text
-from sqlalchemy.orm import Mapped, mapped_column,relationship
+from sqlalchemy import ForeignKey, Integer, Text, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 
+
 class DocumentChunk(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "document_chunks"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "document_id",
+            "chunk_index",
+            name="uq_document_chunks_document_index",
+        ),
+    )
 
     document_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("documents.id", ondelete="CASCADE"),
@@ -14,7 +23,7 @@ class DocumentChunk(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         index=True,
     )
 
-    chunk_index: Mapped[int]= mapped_column(
+    chunk_index: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
     )
