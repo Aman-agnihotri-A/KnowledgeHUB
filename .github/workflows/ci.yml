@@ -9,10 +9,32 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: knowledgehub
+          POSTGRES_USER: knowledgehub
+          POSTGRES_PASSWORD: knowledgehub
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U knowledgehub -d knowledgehub"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      DATABASE_URL: postgresql+psycopg://knowledgehub:knowledgehub@localhost:5432/knowledgehub
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
       - run: pip install -r requirements.txt
+
       - run: python -m pytest
