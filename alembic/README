@@ -1,0 +1,20 @@
+KnowledgeHUB database migrations.
+
+Migrations are managed using Alembic.
+
+Run:
+
+alembic upgrade head
+
+To downgrade:
+
+alembic downgrade -1
+
+## Database Migrations
+
+Create/update the database schema with Alembic.
+
+Upgrade:
+
+```bash
+alembic upgrade head

@@ -36,5 +36,8 @@ jobs:
           python-version: "3.12"
 
       - run: pip install -r requirements.txt
-
+      
+      - name: Run database migrations
+        run: alembic upgrade head
+        
       - run: python -m pytest
