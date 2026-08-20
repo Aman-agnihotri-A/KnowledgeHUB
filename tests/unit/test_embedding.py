@@ -86,3 +86,28 @@ def test_invalid_dimensions_are_rejected():
         DeterministicEmbeddingService(
             dimensions=0,
         )
+
+def test_embed_many_preserves_input_order():
+    service = DeterministicEmbeddingService(
+        dimensions=8,
+    )
+
+    embeddings = service.embed_many(
+        [
+            "KnowledgeHub",
+            "PostgreSQL",
+            "FastAPI",
+        ]
+    )
+
+    assert len(embeddings) == 3
+
+    assert embeddings[0] == service.embed(
+        "KnowledgeHub"
+    )
+    assert embeddings[1] == service.embed(
+        "PostgreSQL"
+    )
+    assert embeddings[2] == service.embed(
+        "FastAPI"
+    )

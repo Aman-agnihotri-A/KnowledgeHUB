@@ -10,7 +10,7 @@ from app.models.user import User
 
 from fastapi.testclient import TestClient
 
-from app.api.documents import document_service
+from app.api.documents import document_service, retrieval_service
 from app.core.security import create_access_token
 from app.main import app
 from app.models.enums import UserRole, DocumentStatus
@@ -1719,5 +1719,213 @@ def test_process_document_returns_bad_request_for_processing_failure():
     finally:
         document_service.process_document = (
             original_service
+        )
+        clear_authentication_override()
+
+def test_retrieve_documents_requires_authentication():
+    tenant_id = uuid4()
+
+    response = client.get(
+        f"/documents/{tenant_id}/retrieve",
+        params={
+            "query": "KnowledgeHub",
+        },
+    )
+
+    assert response.status_code == 401
+
+
+def test_retrieve_documents_rejects_cross_tenant_access():
+    requested_tenant_id = uuid4()
+    user_tenant_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.SUB_USER,
+        tenant_id=user_tenant_id,
+    )
+
+    try:
+        response = client.get(
+            f"/documents/{requested_tenant_id}/retrieve",
+            params={
+                "query": "KnowledgeHub",
+            },
+        )
+
+        assert response.status_code == 403
+
+    finally:
+        clear_authentication_override()
+
+
+def test_retrieve_documents_rejects_empty_query():
+    tenant_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.SUB_USER,
+        tenant_id=tenant_id,
+    )
+
+    try:
+        response = client.get(
+            f"/documents/{tenant_id}/retrieve",
+            params={
+                "query": "   ",
+            },
+        )
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == (
+            "Query cannot be empty."
+        )
+
+    finally:
+        clear_authentication_override()
+
+
+def test_retrieve_documents_returns_ranked_results():
+    tenant_id = uuid4()
+
+    user = authenticate_as(
+        role=UserRole.SUB_USER,
+        tenant_id=tenant_id,
+    )
+
+    document_id = uuid4()
+    first_chunk_id = uuid4()
+    second_chunk_id = uuid4()
+
+    first_result = MagicMock()
+    first_result.chunk.id = first_chunk_id
+    first_result.chunk.document_id = document_id
+    first_result.chunk.document.filename = (
+        "knowledge.pdf"
+    )
+    first_result.chunk.chunk_index = 0
+    first_result.chunk.content = (
+        "Most relevant content"
+    )
+    first_result.similarity = 0.99
+
+    second_result = MagicMock()
+    second_result.chunk.id = second_chunk_id
+    second_result.chunk.document_id = document_id
+    second_result.chunk.document.filename = (
+        "knowledge.pdf"
+    )
+    second_result.chunk.chunk_index = 1
+    second_result.chunk.content = (
+        "Second relevant content"
+    )
+    second_result.similarity = 0.75
+
+    original_retrieve = (
+        retrieval_service.retrieve
+    )
+
+    retrieval_service.retrieve = MagicMock(
+        return_value=[
+            first_result,
+            second_result,
+        ]
+    )
+
+    try:
+        response = client.get(
+            f"/documents/{tenant_id}/retrieve",
+            params={
+                "query": "KnowledgeHub",
+                "top_k": 2,
+            },
+        )
+
+        assert response.status_code == 200
+
+        body = response.json()
+
+        assert len(body["results"]) == 2
+
+        assert (
+            body["results"][0]["chunk_id"]
+            == str(first_chunk_id)
+        )
+
+        assert (
+            body["results"][0]["document_id"]
+            == str(document_id)
+        )
+
+        assert (
+            body["results"][0][
+                "document_filename"
+            ]
+            == "knowledge.pdf"
+        )
+
+        assert (
+            body["results"][0][
+                "content"
+            ]
+            == "Most relevant content"
+        )
+
+        assert (
+            body["results"][0][
+                "similarity"
+            ]
+            == pytest.approx(0.99)
+        )
+
+        retrieval_service.retrieve.assert_called_once_with(
+            ANY,
+            tenant_id=tenant_id,
+            query="KnowledgeHub",
+            top_k=2,
+        )
+
+    finally:
+        retrieval_service.retrieve = (
+            original_retrieve
+        )
+        clear_authentication_override()
+
+
+def test_retrieve_documents_maps_service_error_to_bad_request():
+    tenant_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.SUB_USER,
+        tenant_id=tenant_id,
+    )
+
+    original_retrieve = (
+        retrieval_service.retrieve
+    )
+
+    retrieval_service.retrieve = MagicMock(
+        side_effect=ValueError(
+            "Embedding dimension does not match "
+            "the configured embedding service."
+        )
+    )
+
+    try:
+        response = client.get(
+            f"/documents/{tenant_id}/retrieve",
+            params={
+                "query": "KnowledgeHub",
+            },
+        )
+
+        assert response.status_code == 400
+
+        assert response.json()["detail"] == (
+            "Embedding dimension does not match "
+            "the configured embedding service."
+        )
+
+    finally:
+        retrieval_service.retrieve = (
+            original_retrieve
         )
         clear_authentication_override()

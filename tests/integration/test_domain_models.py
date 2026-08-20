@@ -396,3 +396,61 @@ def test_documents_can_be_filtered_by_status() -> None:
         assert len(result) == 1
         assert result[0].filename == "processing.pdf"
         assert result[0].status == DocumentStatus.PROCESSING
+
+def test_document_chunk_embedding_can_be_persisted() -> None:
+    from sqlalchemy.orm import Session
+
+    tenant = Tenant(
+        name="Embedding Corporation",
+        slug="embedding-corp",
+    )
+
+    with Session(engine) as session:
+        session.add(tenant)
+        session.flush()
+
+        user = User(
+            tenant_id=tenant.id,
+            email="admin@embedding.example",
+            hashed_password="hashed-password",
+            full_name="Embedding Admin",
+            role=UserRole.TENANT_ADMIN,
+        )
+
+        session.add(user)
+        session.flush()
+
+        document = Document(
+            tenant_id=tenant.id,
+            uploaded_by=user.id,
+            filename="embedding.pdf",
+            storage_path="documents/embedding.pdf",
+            status=DocumentStatus.READY,
+        )
+
+        session.add(document)
+        session.flush()
+
+        chunk = DocumentChunk(
+            document_id=document.id,
+            chunk_index=0,
+            content="Persisted embedding",
+            embedding=[
+                0.1,
+                0.2,
+                0.3,
+                0.4,
+            ],
+        )
+
+        session.add(chunk)
+        session.commit()
+
+        session.refresh(chunk)
+
+        assert chunk.embedding == [
+            0.1,
+            0.2,
+            0.3,
+            0.4,
+        ]

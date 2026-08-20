@@ -231,3 +231,50 @@ def test_update_embeddings_with_empty_mapping():
 
     db.scalars.assert_not_called()
     db.flush.assert_not_called()
+
+def test_list_ready_chunks_by_tenant():
+    db = MagicMock()
+    repository = DocumentChunkRepository()
+
+    tenant_id = uuid4()
+
+    chunks = [
+        DocumentChunk(
+            document_id=uuid4(),
+            chunk_index=0,
+            content="Ready chunk",
+        ),
+    ]
+
+    db.scalars.return_value.all.return_value = (
+        chunks
+    )
+
+    result = (
+        repository.list_ready_chunks_by_tenant(
+            db,
+            tenant_id,
+        )
+    )
+
+    assert result == chunks
+    db.scalars.assert_called_once()
+
+
+def test_list_ready_chunks_by_tenant_returns_empty_list():
+    db = MagicMock()
+    repository = DocumentChunkRepository()
+
+    tenant_id = uuid4()
+
+    db.scalars.return_value.all.return_value = []
+
+    result = (
+        repository.list_ready_chunks_by_tenant(
+            db,
+            tenant_id,
+        )
+    )
+
+    assert result == []
+    db.scalars.assert_called_once()

@@ -28,6 +28,11 @@ from app.schemas.document import (
 )
 from app.services.document import DocumentService
 from app.services.storage import StorageService
+from app.schemas.retrieval import (
+    RetrievalResponse,
+    RetrievalResult,
+)
+from app.services.retrieval import RetrievalService
 
 
 router = APIRouter(
@@ -44,6 +49,7 @@ document_service = DocumentService(
     storage_service=storage_service,
 )
 
+retrieval_service = RetrievalService()
 
 @router.post(
     "/{tenant_id}",
@@ -154,6 +160,54 @@ def process_document(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
         ) from exc
+
+@router.get(
+    "/{tenant_id}/retrieve",
+    response_model=RetrievalResponse,
+)
+def retrieve_documents(
+    tenant_id: uuid.UUID,
+    query: str = Query(
+        min_length=1,
+    ),
+    top_k: int = Query(
+        default=5,
+        ge=1,
+        le=50,
+    ),
+    current_user: User = Depends(
+        require_tenant_access,
+    ),
+    db: Session = Depends(get_db),
+) -> RetrievalResponse:
+    try:
+        results = retrieval_service.retrieve(
+            db,
+            tenant_id=tenant_id,
+            query=query,
+            top_k=top_k,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+    return RetrievalResponse(
+        results=[
+            RetrievalResult(
+                chunk_id=result.chunk.id,
+                document_id=result.chunk.document_id,
+                document_filename=(
+                    result.chunk.document.filename
+                ),
+                chunk_index=result.chunk.chunk_index,
+                content=result.chunk.content,
+                similarity=result.similarity,
+            )
+            for result in results
+        ]
+    )
 
 @router.get(
     "/{tenant_id}/{document_id}",
