@@ -82,3 +82,16 @@ class UserRepository:
         )
 
         return list(db.scalars(statement).all())
+    def update_active_status(
+        self,
+        db: Session,
+        user: User,
+        *,
+        is_active: bool,
+    ) -> User:
+        user.is_active = is_active
+
+        db.commit()
+        db.refresh(user)
+
+        return user

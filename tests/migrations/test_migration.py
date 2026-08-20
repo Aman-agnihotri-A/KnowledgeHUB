@@ -87,3 +87,36 @@ def test_migrations_can_downgrade_and_upgrade() -> None:
         assert "users" in tables
         assert "documents" in tables
         assert "document_chunks" in tables
+        tenant_columns = {
+            column["name"]: column
+            for column in inspector.get_columns("tenants")
+        }
+
+        user_columns = {
+            column["name"]: column
+            for column in inspector.get_columns("users")
+        }
+
+        document_columns = {
+            column["name"]: column
+            for column in inspector.get_columns("documents")
+        }
+
+        chunk_columns = {
+            column["name"]: column
+            for column in inspector.get_columns(
+                "document_chunks"
+            )
+        }
+
+        assert tenant_columns["created_at"]["default"] is not None
+        assert tenant_columns["updated_at"]["default"] is not None
+
+        assert user_columns["created_at"]["default"] is not None
+        assert user_columns["updated_at"]["default"] is not None
+
+        assert document_columns["created_at"]["default"] is not None
+        assert document_columns["updated_at"]["default"] is not None
+
+        assert chunk_columns["created_at"]["default"] is not None
+        assert chunk_columns["updated_at"]["default"] is not None

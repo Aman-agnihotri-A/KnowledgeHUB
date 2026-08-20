@@ -12,7 +12,11 @@ from app.db.session import get_db
 from app.models.enums import UserRole
 from app.models.user import User
 from app.schemas.tenant import TenantCreate, TenantRead
-from app.schemas.user import UserCreate, UserRead
+from app.schemas.user import (
+    UserCreate,
+    UserRead,
+    UserStatusUpdate,
+)
 from app.services.tenant import TenantService
 from app.services.user import UserService
 
@@ -148,3 +152,50 @@ def list_tenant_users(
         db,
         tenant_id,
     )
+@router.patch(
+    "/{tenant_id}/users/{user_id}/status",
+    response_model=UserRead,
+)
+def update_tenant_user_status(
+    tenant_id: uuid.UUID,
+    user_id: uuid.UUID,
+    payload: UserStatusUpdate,
+    current_user: User = Depends(
+        require_tenant_admin_access
+    ),
+    db: Session = Depends(get_db),
+) -> UserRead:
+    
+    try:
+        user = user_service.get_user(
+            db,
+            user_id,
+        )
+
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found.",
+            )
+
+        if (
+            current_user.role == UserRole.TENANT_ADMIN
+            and user.role != UserRole.SUB_USER
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Tenant Admin can only manage Sub Users.",
+            )
+
+        return user_service.update_user_status(
+            db,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            is_active=payload.is_active,
+        )
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc

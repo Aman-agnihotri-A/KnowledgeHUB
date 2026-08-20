@@ -295,3 +295,42 @@ def test_document_status_is_persisted() -> None:
 
         assert persisted_document is not None
         assert persisted_document.status == DocumentStatus.PROCESSING
+
+def test_user_active_status_is_persisted() -> None:
+    from sqlalchemy.orm import Session
+
+    tenant = Tenant(
+        name="Lifecycle Tenant",
+        slug="lifecycle-tenant",
+    )
+
+    with Session(engine) as session:
+        session.add(tenant)
+        session.flush()
+
+        user = User(
+            tenant_id=tenant.id,
+            email="lifecycle@example.com",
+            hashed_password="hashed-password",
+            full_name="Lifecycle User",
+            role=UserRole.SUB_USER,
+            is_active=True,
+        )
+
+        session.add(user)
+        session.commit()
+
+        user_id = user.id
+
+        user.is_active = False
+        session.commit()
+
+        session.expire_all()
+
+        persisted_user = session.get(
+            User,
+            user_id,
+        )
+
+        assert persisted_user is not None
+        assert persisted_user.is_active is False

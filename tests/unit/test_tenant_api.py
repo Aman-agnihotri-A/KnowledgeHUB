@@ -783,3 +783,283 @@ def test_super_admin_can_list_any_tenant_users():
     finally:
         user_service.list_active_tenant_users = original_list
         clear_authentication_override()
+
+def test_update_user_status_requires_authentication():
+    tenant_id = uuid4()
+    user_id = uuid4()
+
+    response = client.patch(
+        f"/tenants/{tenant_id}/users/{user_id}/status",
+        json={"is_active": False},
+    )
+
+    assert response.status_code == 401
+
+
+def test_tenant_admin_can_deactivate_sub_user():
+    tenant_id = uuid4()
+    user_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.TENANT_ADMIN,
+        tenant_id=tenant_id,
+    )
+
+    user = User(
+        id=user_id,
+        email="user@example.com",
+        hashed_password="hashed-password",
+        full_name="Sub User",
+        role=UserRole.SUB_USER,
+        tenant_id=tenant_id,
+        is_active=False,
+    )
+
+    original_get = user_service.get_user
+    original_update = user_service.update_user_status
+
+    user_service.get_user = MagicMock(
+        return_value=user,
+    )
+    user_service.update_user_status = MagicMock(
+        return_value=user,
+    )
+
+    try:
+        response = client.patch(
+            f"/tenants/{tenant_id}/users/{user_id}/status",
+            json={"is_active": False},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["is_active"] is False
+
+        user_service.update_user_status.assert_called_once_with(
+            ANY,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            is_active=False,
+        )
+
+    finally:
+        user_service.get_user = original_get
+        user_service.update_user_status = original_update
+        clear_authentication_override()
+
+
+def test_tenant_admin_can_reactivate_sub_user():
+    tenant_id = uuid4()
+    user_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.TENANT_ADMIN,
+        tenant_id=tenant_id,
+    )
+
+    user = User(
+        id=user_id,
+        email="user@example.com",
+        hashed_password="hashed-password",
+        full_name="Sub User",
+        role=UserRole.SUB_USER,
+        tenant_id=tenant_id,
+        is_active=True,
+    )
+
+    original_get = user_service.get_user
+    original_update = user_service.update_user_status
+
+    user_service.get_user = MagicMock(
+        return_value=user,
+    )
+    user_service.update_user_status = MagicMock(
+        return_value=user,
+    )
+
+    try:
+        response = client.patch(
+            f"/tenants/{tenant_id}/users/{user_id}/status",
+            json={"is_active": True},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["is_active"] is True
+
+    finally:
+        user_service.get_user = original_get
+        user_service.update_user_status = original_update
+        clear_authentication_override()
+
+
+def test_tenant_admin_cannot_modify_tenant_admin():
+    tenant_id = uuid4()
+    user_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.TENANT_ADMIN,
+        tenant_id=tenant_id,
+    )
+
+    user = User(
+        id=user_id,
+        email="admin@example.com",
+        hashed_password="hashed-password",
+        full_name="Another Admin",
+        role=UserRole.TENANT_ADMIN,
+        tenant_id=tenant_id,
+        is_active=True,
+    )
+
+    original_get = user_service.get_user
+    user_service.get_user = MagicMock(
+        return_value=user,
+    )
+
+    try:
+        response = client.patch(
+            f"/tenants/{tenant_id}/users/{user_id}/status",
+            json={"is_active": False},
+        )
+
+        assert response.status_code == 403
+
+    finally:
+        user_service.get_user = original_get
+        clear_authentication_override()
+
+
+def test_tenant_admin_cannot_modify_user_in_other_tenant():
+    own_tenant_id = uuid4()
+    other_tenant_id = uuid4()
+    user_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.TENANT_ADMIN,
+        tenant_id=own_tenant_id,
+    )
+
+    try:
+        response = client.patch(
+            f"/tenants/{other_tenant_id}/users/{user_id}/status",
+            json={"is_active": False},
+        )
+
+        assert response.status_code == 403
+
+    finally:
+        clear_authentication_override()
+
+
+def test_sub_user_cannot_modify_user_status():
+    tenant_id = uuid4()
+    user_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.SUB_USER,
+        tenant_id=tenant_id,
+    )
+
+    try:
+        response = client.patch(
+            f"/tenants/{tenant_id}/users/{user_id}/status",
+            json={"is_active": False},
+        )
+
+        assert response.status_code == 403
+
+    finally:
+        clear_authentication_override()
+
+
+def test_super_admin_can_deactivate_tenant_admin():
+    tenant_id = uuid4()
+    user_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.SUPER_ADMIN,
+        tenant_id=None,
+    )
+
+    user = User(
+        id=user_id,
+        email="admin@example.com",
+        hashed_password="hashed-password",
+        full_name="Tenant Admin",
+        role=UserRole.TENANT_ADMIN,
+        tenant_id=tenant_id,
+        is_active=False,
+    )
+
+    original_get = user_service.get_user
+    original_update = user_service.update_user_status
+
+    user_service.get_user = MagicMock(
+        return_value=user,
+    )
+    user_service.update_user_status = MagicMock(
+        return_value=user,
+    )
+
+    try:
+        response = client.patch(
+            f"/tenants/{tenant_id}/users/{user_id}/status",
+            json={"is_active": False},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["role"] == "tenant_admin"
+        assert response.json()["is_active"] is False
+
+    finally:
+        user_service.get_user = original_get
+        user_service.update_user_status = original_update
+        clear_authentication_override()
+
+
+def test_update_user_status_missing_user_returns_404():
+    tenant_id = uuid4()
+    user_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.TENANT_ADMIN,
+        tenant_id=tenant_id,
+    )
+
+    original_get = user_service.get_user
+    user_service.get_user = MagicMock(
+        return_value=None,
+    )
+
+    try:
+        response = client.patch(
+            f"/tenants/{tenant_id}/users/{user_id}/status",
+            json={"is_active": False},
+        )
+
+        assert response.status_code == 404
+        assert response.json()["detail"] == "User not found."
+
+    finally:
+        user_service.get_user = original_get
+        clear_authentication_override()
+
+
+def test_update_user_status_invalid_payload_returns_422():
+    tenant_id = uuid4()
+    user_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.TENANT_ADMIN,
+        tenant_id=tenant_id,
+    )
+
+    try:
+        response = client.patch(
+            f"/tenants/{tenant_id}/users/{user_id}/status",
+            json={"is_active": "not-a-boolean"},
+        )
+
+        assert response.status_code == 422
+
+    finally:
+        clear_authentication_override()

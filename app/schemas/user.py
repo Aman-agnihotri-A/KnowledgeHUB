@@ -11,6 +11,8 @@ class UserCreate(BaseModel):
     full_name: str
     role: UserRole
 
+class UserStatusUpdate(BaseModel):
+    is_active: bool
 
 class UserRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)

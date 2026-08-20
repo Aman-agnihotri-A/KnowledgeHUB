@@ -142,3 +142,32 @@ def test_list_active_users_by_tenant():
     )
 
     assert result == [user]
+
+def test_update_user_active_status():
+    from unittest.mock import MagicMock
+    from uuid import uuid4
+
+    db = MagicMock()
+    repository = UserRepository()
+
+    user = User(
+        id=uuid4(),
+        email="user@example.com",
+        hashed_password="hashed-password",
+        full_name="Test User",
+        role=UserRole.SUB_USER,
+        tenant_id=uuid4(),
+        is_active=True,
+    )
+
+    result = repository.update_active_status(
+        db,
+        user,
+        is_active=False,
+    )
+
+    assert result is user
+    assert user.is_active is False
+
+    db.commit.assert_called_once()
+    db.refresh.assert_called_once_with(user)

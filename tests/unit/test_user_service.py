@@ -396,3 +396,204 @@ def test_authenticate_user_rejects_inactive_user():
     )
 
     assert result is None
+
+def test_update_user_status_deactivates_user():
+    db = MagicMock()
+    repository = MagicMock()
+    service = UserService(repository)
+
+    tenant_id = uuid4()
+
+    user = User(
+        id=uuid4(),
+        email="user@example.com",
+        hashed_password="hashed-password",
+        full_name="Test User",
+        role=UserRole.SUB_USER,
+        tenant_id=tenant_id,
+        is_active=True,
+    )
+
+    repository.get_by_id.return_value = user
+    repository.update_active_status.return_value = user
+
+    result = service.update_user_status(
+        db,
+        user_id=user.id,
+        tenant_id=tenant_id,
+        is_active=False,
+    )
+
+    assert result is user
+
+    repository.get_by_id.assert_called_once_with(
+        db,
+        user.id,
+    )
+
+    repository.update_active_status.assert_called_once_with(
+        db,
+        user,
+        is_active=False,
+    )
+
+
+def test_update_user_status_reactivates_user():
+    db = MagicMock()
+    repository = MagicMock()
+    service = UserService(repository)
+
+    tenant_id = uuid4()
+
+    user = User(
+        id=uuid4(),
+        email="user@example.com",
+        hashed_password="hashed-password",
+        full_name="Test User",
+        role=UserRole.SUB_USER,
+        tenant_id=tenant_id,
+        is_active=False,
+    )
+
+    repository.get_by_id.return_value = user
+    repository.update_active_status.return_value = user
+
+    result = service.update_user_status(
+        db,
+        user_id=user.id,
+        tenant_id=tenant_id,
+        is_active=True,
+    )
+
+    assert result is user
+
+    repository.update_active_status.assert_called_once_with(
+        db,
+        user,
+        is_active=True,
+    )
+
+
+def test_update_user_status_is_idempotent():
+    db = MagicMock()
+    repository = MagicMock()
+    service = UserService(repository)
+
+    tenant_id = uuid4()
+
+    user = User(
+        id=uuid4(),
+        email="user@example.com",
+        hashed_password="hashed-password",
+        full_name="Test User",
+        role=UserRole.SUB_USER,
+        tenant_id=tenant_id,
+        is_active=False,
+    )
+
+    repository.get_by_id.return_value = user
+    repository.update_active_status.return_value = user
+
+    result = service.update_user_status(
+        db,
+        user_id=user.id,
+        tenant_id=tenant_id,
+        is_active=False,
+    )
+
+    assert result is user
+
+    repository.update_active_status.assert_called_once_with(
+        db,
+        user,
+        is_active=False,
+    )
+
+
+def test_update_user_status_rejects_missing_user():
+    db = MagicMock()
+    repository = MagicMock()
+    service = UserService(repository)
+
+    repository.get_by_id.return_value = None
+
+    with pytest.raises(
+        ValueError,
+        match="User not found.",
+    ):
+        service.update_user_status(
+            db,
+            user_id=uuid4(),
+            tenant_id=uuid4(),
+            is_active=False,
+        )
+
+    repository.update_active_status.assert_not_called()
+
+
+def test_update_user_status_rejects_cross_tenant_user():
+    db = MagicMock()
+    repository = MagicMock()
+    service = UserService(repository)
+
+    user_tenant_id = uuid4()
+    requested_tenant_id = uuid4()
+
+    user = User(
+        id=uuid4(),
+        email="user@example.com",
+        hashed_password="hashed-password",
+        full_name="Test User",
+        role=UserRole.SUB_USER,
+        tenant_id=user_tenant_id,
+        is_active=True,
+    )
+
+    repository.get_by_id.return_value = user
+
+    with pytest.raises(
+        ValueError,
+        match="User does not belong to the specified tenant.",
+    ):
+        service.update_user_status(
+            db,
+            user_id=user.id,
+            tenant_id=requested_tenant_id,
+            is_active=False,
+        )
+
+    repository.update_active_status.assert_not_called()
+
+
+def test_update_user_status_rejects_super_admin():
+    db = MagicMock()
+    repository = MagicMock()
+    service = UserService(repository)
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "Super Admin users cannot be managed through "
+            "tenant user administration."
+        ),
+    ):
+        user = User(
+            id=uuid4(),
+            email="superadmin@example.com",
+            hashed_password="hashed-password",
+            full_name="Super Admin",
+            role=UserRole.SUPER_ADMIN,
+            tenant_id=None,
+            is_active=True,
+        )
+
+        repository.get_by_id.return_value = user
+
+        service.update_user_status(
+            db,
+            user_id=user.id,
+            tenant_id=uuid4(),
+            is_active=False,
+        )
+
+    repository.update_active_status.assert_not_called()

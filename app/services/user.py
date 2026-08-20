@@ -118,3 +118,35 @@ class UserService:
             return None
 
         return user
+    def update_user_status(
+        self,
+        db: Session,
+        *,
+        user_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        is_active: bool,
+    ) -> User:
+        user = self.repository.get_by_id(
+            db,
+            user_id,
+        )
+
+        if user is None:
+            raise ValueError("User not found.")
+
+        if user.role == UserRole.SUPER_ADMIN:
+            raise ValueError(
+                "Super Admin users cannot be managed through "
+                "tenant user administration."
+            )
+
+        if user.tenant_id != tenant_id:
+            raise ValueError(
+                "User does not belong to the specified tenant."
+            )
+
+        return self.repository.update_active_status(
+            db,
+            user,
+            is_active=is_active,
+        )
