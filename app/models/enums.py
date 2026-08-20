@@ -6,8 +6,13 @@ class UserRole(str, Enum):
     SUB_USER = "sub_user"
 
 
-class  DocumentStatus(str, Enum):
+class DocumentStatus(str, Enum):
     UPLOADED = "uploaded"
     PROCESSING = "processing"
     READY = "ready"
     FAILED = "failed"
+
+
+class MessageRole(str, Enum):
+    USER = "user"
+    ASSISTANT = "assistant"

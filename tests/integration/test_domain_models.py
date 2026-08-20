@@ -6,9 +6,12 @@ from sqlalchemy.exc import IntegrityError
 from app.db import engine
 from app.models import (
     Base,
+    Conversation,
+    ConversationMessage,
     Document,
     DocumentChunk,
     DocumentStatus,
+    MessageRole,
     Tenant,
     User,
     UserRole,
@@ -454,3 +457,198 @@ def test_document_chunk_embedding_can_be_persisted() -> None:
             0.3,
             0.4,
         ]
+
+def test_conversation_and_messages_can_be_persisted() -> None:
+    from sqlalchemy.orm import Session
+
+    tenant = Tenant(
+        name="Conversation Tenant",
+        slug="conversation-tenant",
+    )
+
+    with Session(engine) as session:
+        session.add(tenant)
+        session.flush()
+
+        user = User(
+            tenant_id=tenant.id,
+            email="conversation@example.com",
+            hashed_password="hashed-password",
+            full_name="Conversation User",
+            role=UserRole.SUB_USER,
+        )
+
+        session.add(user)
+        session.flush()
+
+        conversation = Conversation(
+            tenant_id=tenant.id,
+            user_id=user.id,
+            title="Knowledge discussion",
+        )
+
+        session.add(conversation)
+        session.flush()
+
+        user_message = ConversationMessage(
+            conversation_id=conversation.id,
+            message_index=0,
+            role=MessageRole.USER,
+            content="What is KnowledgeHub?",
+        )
+
+        assistant_message = ConversationMessage(
+            conversation_id=conversation.id,
+            message_index=1,
+            role=MessageRole.ASSISTANT,
+            content="KnowledgeHub is a knowledge platform.",
+            sources=[
+                {
+                    "document_id": str(uuid.uuid4()),
+                    "chunk_index": 0,
+                    "similarity": 0.94,
+                }
+            ],
+        )
+
+        session.add_all(
+            [
+                user_message,
+                assistant_message,
+            ]
+        )
+
+        session.commit()
+
+        assert conversation.id is not None
+        assert user_message.id is not None
+        assert assistant_message.id is not None
+
+        session.expire_all()
+
+        persisted = session.get(
+            Conversation,
+            conversation.id,
+        )
+
+        assert persisted is not None
+        assert len(persisted.messages) == 2
+        assert (
+            persisted.messages[0].role
+            == MessageRole.USER
+        )
+        assert (
+            persisted.messages[1].role
+            == MessageRole.ASSISTANT
+        )
+
+
+def test_conversation_message_index_must_be_unique() -> None:
+    from sqlalchemy.orm import Session
+    from sqlalchemy.exc import IntegrityError
+
+    tenant = Tenant(
+        name="Message Index Tenant",
+        slug="message-index-tenant",
+    )
+
+    with Session(engine) as session:
+        session.add(tenant)
+        session.flush()
+
+        user = User(
+            tenant_id=tenant.id,
+            email="message-index@example.com",
+            hashed_password="hashed-password",
+            full_name="Message Index User",
+            role=UserRole.SUB_USER,
+        )
+
+        session.add(user)
+        session.flush()
+
+        conversation = Conversation(
+            tenant_id=tenant.id,
+            user_id=user.id,
+            title="Indexed",
+        )
+
+        session.add(conversation)
+        session.flush()
+
+        session.add_all(
+            [
+                ConversationMessage(
+                    conversation_id=conversation.id,
+                    message_index=0,
+                    role=MessageRole.USER,
+                    content="First",
+                ),
+                ConversationMessage(
+                    conversation_id=conversation.id,
+                    message_index=0,
+                    role=MessageRole.ASSISTANT,
+                    content="Duplicate",
+                ),
+            ]
+        )
+
+        with pytest.raises(IntegrityError):
+            session.commit()
+
+
+def test_tenant_deletion_cascades_conversations() -> None:
+    from sqlalchemy.orm import Session
+
+    tenant = Tenant(
+        name="Conversation Delete Tenant",
+        slug="conversation-delete-tenant",
+    )
+
+    with Session(engine) as session:
+        session.add(tenant)
+        session.flush()
+
+        user = User(
+            tenant_id=tenant.id,
+            email="conversation-delete@example.com",
+            hashed_password="hashed-password",
+            full_name="Delete User",
+            role=UserRole.SUB_USER,
+        )
+
+        session.add(user)
+        session.flush()
+
+        conversation = Conversation(
+            tenant_id=tenant.id,
+            user_id=user.id,
+            title="Delete me",
+        )
+
+        session.add(conversation)
+        session.flush()
+
+        session.add(
+            ConversationMessage(
+                conversation_id=conversation.id,
+                message_index=0,
+                role=MessageRole.USER,
+                content="Delete me too",
+            )
+        )
+
+        session.commit()
+
+        conversation_id = conversation.id
+
+        session.delete(tenant)
+        session.commit()
+
+        assert (
+            session.get(
+                Conversation,
+                conversation_id,
+            )
+            is None
+        )

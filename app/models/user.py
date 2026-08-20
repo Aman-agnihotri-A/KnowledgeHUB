@@ -4,15 +4,26 @@ from sqlalchemy import Enum as SQLEnum
 from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from app.models.base import (
+    Base,
+    TimestampMixin,
+    UUIDPrimaryKeyMixin,
+)
 from app.models.enums import UserRole
 
 
-class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+class User(
+    UUIDPrimaryKeyMixin,
+    TimestampMixin,
+    Base,
+):
     __tablename__ = "users"
 
     tenant_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("tenants.id", ondelete="CASCADE"),
+        ForeignKey(
+            "tenants.id",
+            ondelete="CASCADE",
+        ),
         nullable=True,
         index=True,
     )
@@ -48,6 +59,15 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         back_populates="users",
     )
 
-    uploaded_documents: Mapped[list["Document"]] = relationship(
+    uploaded_documents: Mapped[
+        list["Document"]
+    ] = relationship(
         back_populates="uploaded_by_user",
+    )
+
+    conversations: Mapped[
+        list["Conversation"]
+    ] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
     )

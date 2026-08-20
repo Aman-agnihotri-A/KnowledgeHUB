@@ -70,3 +70,32 @@ def require_tenant_admin_access(
         status_code=status.HTTP_403_FORBIDDEN,
         detail="User does not have permission to manage tenant users.",
     )
+
+def require_conversation_user_access(
+    tenant_id: UUID,
+    current_user: User = Depends(get_current_user),
+) -> User:
+    """
+    Allow tenant users to access their own conversations.
+
+    Conversation persistence is user-owned, so SUPER_ADMIN
+    is intentionally excluded from this endpoint until
+    tenant-wide conversation administration is introduced.
+    """
+
+    if current_user.role not in {
+        UserRole.TENANT_ADMIN,
+        UserRole.SUB_USER,
+    }:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User does not have permission to access conversations.",
+        )
+
+    if current_user.tenant_id != tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User does not have access to this tenant.",
+        )
+
+    return current_user
