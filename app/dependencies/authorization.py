@@ -44,3 +44,29 @@ def require_tenant_access(
         )
 
     return current_user
+
+def require_tenant_admin_access(
+    tenant_id: UUID,
+    current_user: User = Depends(get_current_user),
+) -> User:
+    """
+    Allow SUPER_ADMIN to manage users in any tenant.
+
+    Allow TENANT_ADMIN to manage users only in their own tenant.
+
+    SUB_USER is never allowed to manage tenant users.
+    """
+
+    if current_user.role == UserRole.SUPER_ADMIN:
+        return current_user
+
+    if (
+        current_user.role == UserRole.TENANT_ADMIN
+        and current_user.tenant_id == tenant_id
+    ):
+        return current_user
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="User does not have permission to manage tenant users.",
+    )

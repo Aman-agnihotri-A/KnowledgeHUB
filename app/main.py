@@ -2,6 +2,7 @@ from fastapi import FastAPI
 
 from app.api.auth import router as auth_router
 from app.api.documents import router as document_router
+from app.api.tenants import router as tenant_router
 from app.core.config import settings
 
 
@@ -12,6 +13,7 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(auth_router)
+    app.include_router(tenant_router)
     app.include_router(document_router)
 
     @app.get("/health", tags=["system"])

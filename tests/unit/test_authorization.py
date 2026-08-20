@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from app.dependencies.authorization import (
     require_role,
     require_tenant_access,
+    require_tenant_admin_access,
 )
 from app.models.enums import UserRole
 from app.models.user import User
@@ -289,4 +290,78 @@ def test_sub_user_cannot_access_other_tenant():
     assert exc_info.value.status_code == 403
     assert exc_info.value.detail == (
         "User does not have access to this tenant."
+    )
+
+def test_super_admin_can_manage_any_tenant_users():
+    tenant_id = uuid4()
+
+    user = make_user(
+        UserRole.SUPER_ADMIN,
+        tenant_id=None,
+    )
+
+    dependency = require_tenant_admin_access
+
+    result = dependency(
+        tenant_id=tenant_id,
+        current_user=user,
+    )
+
+    assert result is user
+
+
+def test_tenant_admin_can_manage_own_tenant_users():
+    tenant_id = uuid4()
+
+    user = make_user(
+        UserRole.TENANT_ADMIN,
+        tenant_id=tenant_id,
+    )
+
+    result = require_tenant_admin_access(
+        tenant_id=tenant_id,
+        current_user=user,
+    )
+
+    assert result is user
+
+
+def test_tenant_admin_cannot_manage_other_tenant_users():
+    own_tenant_id = uuid4()
+    other_tenant_id = uuid4()
+
+    user = make_user(
+        UserRole.TENANT_ADMIN,
+        tenant_id=own_tenant_id,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        require_tenant_admin_access(
+            tenant_id=other_tenant_id,
+            current_user=user,
+        )
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == (
+        "User does not have permission to manage tenant users."
+    )
+
+
+def test_sub_user_cannot_manage_tenant_users():
+    tenant_id = uuid4()
+
+    user = make_user(
+        UserRole.SUB_USER,
+        tenant_id=tenant_id,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        require_tenant_admin_access(
+            tenant_id=tenant_id,
+            current_user=user,
+        )
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == (
+        "User does not have permission to manage tenant users."
     )
