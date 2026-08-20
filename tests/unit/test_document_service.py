@@ -705,3 +705,43 @@ def test_update_document_status_rejects_missing_document():
         )
 
     document_repository.update_status.assert_not_called()
+
+def test_list_tenant_documents_by_status():
+    db = MagicMock()
+    document_repository = MagicMock()
+    user_repository = MagicMock()
+
+    service = DocumentService(
+        document_repository=document_repository,
+        user_repository=user_repository,
+    )
+
+    tenant_id = uuid4()
+
+    documents = [
+        Document(
+            tenant_id=tenant_id,
+            uploaded_by=uuid4(),
+            filename="processing.pdf",
+            storage_path="documents/processing.pdf",
+            status=DocumentStatus.PROCESSING,
+        ),
+    ]
+
+    document_repository.list_by_tenant_and_status.return_value = (
+        documents
+    )
+
+    result = service.list_tenant_documents_by_status(
+        db,
+        tenant_id,
+        DocumentStatus.PROCESSING,
+    )
+
+    assert result == documents
+
+    document_repository.list_by_tenant_and_status.assert_called_once_with(
+        db,
+        tenant_id,
+        DocumentStatus.PROCESSING,
+    )

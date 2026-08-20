@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -8,6 +8,7 @@ from app.dependencies.authorization import (
     require_tenant_access,
     require_tenant_admin_access,
 )
+from app.models.enums import DocumentStatus
 from app.models.user import User
 from app.schemas.document import (
     DocumentCreate,
@@ -84,12 +85,23 @@ def get_document(
 )
 def list_documents(
     tenant_id: uuid.UUID,
+    status_filter: DocumentStatus | None = Query(
+        default=None,
+        alias="status",
+    ),
     current_user: User = Depends(require_tenant_access),
     db: Session = Depends(get_db),
 ) -> list[DocumentRead]:
-    return document_service.list_tenant_documents(
+    if status_filter is None:
+        return document_service.list_tenant_documents(
+            db,
+            tenant_id,
+        )
+
+    return document_service.list_tenant_documents_by_status(
         db,
         tenant_id,
+        status_filter,
     )
 
 

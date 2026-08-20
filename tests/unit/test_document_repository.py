@@ -151,3 +151,37 @@ def test_update_document_status_to_failed():
 
     db.commit.assert_called_once()
     db.refresh.assert_called_once_with(document)
+
+def test_list_documents_by_tenant_and_status():
+    db = MagicMock()
+    repository = DocumentRepository()
+
+    tenant_id = uuid4()
+
+    documents = [
+        Document(
+            tenant_id=tenant_id,
+            uploaded_by=uuid4(),
+            filename="processing-1.pdf",
+            storage_path="documents/processing-1.pdf",
+            status=DocumentStatus.PROCESSING,
+        ),
+        Document(
+            tenant_id=tenant_id,
+            uploaded_by=uuid4(),
+            filename="processing-2.pdf",
+            storage_path="documents/processing-2.pdf",
+            status=DocumentStatus.PROCESSING,
+        ),
+    ]
+
+    db.scalars.return_value.all.return_value = documents
+
+    result = repository.list_by_tenant_and_status(
+        db,
+        tenant_id,
+        DocumentStatus.PROCESSING,
+    )
+
+    assert result == documents
+    db.scalars.assert_called_once()

@@ -885,3 +885,246 @@ def test_update_document_status_invalid_status_returns_422():
 
     finally:
         clear_authentication_override()
+
+def test_list_documents_without_status():
+    tenant_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.TENANT_ADMIN,
+        tenant_id=tenant_id,
+    )
+
+    documents = [
+        MagicMock(
+            id=uuid4(),
+            tenant_id=tenant_id,
+            uploaded_by=uuid4(),
+            filename="one.pdf",
+            storage_path="documents/one.pdf",
+            status=DocumentStatus.UPLOADED,
+        ),
+        MagicMock(
+            id=uuid4(),
+            tenant_id=tenant_id,
+            uploaded_by=uuid4(),
+            filename="two.pdf",
+            storage_path="documents/two.pdf",
+            status=DocumentStatus.READY,
+        ),
+    ]
+
+    original_list = document_service.list_tenant_documents
+
+    document_service.list_tenant_documents = MagicMock(
+        return_value=documents,
+    )
+
+    try:
+        response = client.get(
+            f"/documents/{tenant_id}",
+        )
+
+        assert response.status_code == 200
+        assert len(response.json()) == 2
+
+        document_service.list_tenant_documents.assert_called_once_with(
+            ANY,
+            tenant_id,
+        )
+
+    finally:
+        document_service.list_tenant_documents = original_list
+        clear_authentication_override()
+
+def test_list_documents_filters_by_status():
+    tenant_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.TENANT_ADMIN,
+        tenant_id=tenant_id,
+    )
+
+    documents = [
+        MagicMock(
+            id=uuid4(),
+            tenant_id=tenant_id,
+            uploaded_by=uuid4(),
+            filename="processing.pdf",
+            storage_path="documents/processing.pdf",
+            status=DocumentStatus.PROCESSING,
+        ),
+    ]
+
+    original_list = (
+        document_service.list_tenant_documents_by_status
+    )
+
+    document_service.list_tenant_documents_by_status = MagicMock(
+        return_value=documents,
+    )
+
+    try:
+        response = client.get(
+            f"/documents/{tenant_id}",
+            params={"status": "processing"},
+        )
+
+        assert response.status_code == 200
+        assert len(response.json()) == 1
+        assert response.json()[0]["status"] == "processing"
+
+        document_service.list_tenant_documents_by_status.assert_called_once_with(
+            ANY,
+            tenant_id,
+            DocumentStatus.PROCESSING,
+        )
+
+    finally:
+        document_service.list_tenant_documents_by_status = (
+            original_list
+        )
+        clear_authentication_override()
+
+def test_list_documents_filters_ready_documents():
+    tenant_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.SUB_USER,
+        tenant_id=tenant_id,
+    )
+
+    documents = [
+        MagicMock(
+            id=uuid4(),
+            tenant_id=tenant_id,
+            uploaded_by=uuid4(),
+            filename="ready.pdf",
+            storage_path="documents/ready.pdf",
+            status=DocumentStatus.READY,
+        ),
+    ]
+
+    original_list = (
+        document_service.list_tenant_documents_by_status
+    )
+
+    document_service.list_tenant_documents_by_status = MagicMock(
+        return_value=documents,
+    )
+
+    try:
+        response = client.get(
+            f"/documents/{tenant_id}",
+            params={"status": "ready"},
+        )
+
+        assert response.status_code == 200
+        assert response.json()[0]["status"] == "ready"
+
+        document_service.list_tenant_documents_by_status.assert_called_once_with(
+            ANY,
+            tenant_id,
+            DocumentStatus.READY,
+        )
+
+    finally:
+        document_service.list_tenant_documents_by_status = (
+            original_list
+        )
+        clear_authentication_override()
+
+def test_list_documents_filters_failed_documents():
+    tenant_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.TENANT_ADMIN,
+        tenant_id=tenant_id,
+    )
+
+    documents = [
+        MagicMock(
+            id=uuid4(),
+            tenant_id=tenant_id,
+            uploaded_by=uuid4(),
+            filename="failed.pdf",
+            storage_path="documents/failed.pdf",
+            status=DocumentStatus.FAILED,
+        ),
+    ]
+
+    original_list = (
+        document_service.list_tenant_documents_by_status
+    )
+
+    document_service.list_tenant_documents_by_status = MagicMock(
+        return_value=documents,
+    )
+
+    try:
+        response = client.get(
+            f"/documents/{tenant_id}",
+            params={"status": "failed"},
+        )
+
+        assert response.status_code == 200
+        assert response.json()[0]["status"] == "failed"
+
+        document_service.list_tenant_documents_by_status.assert_called_once_with(
+            ANY,
+            tenant_id,
+            DocumentStatus.FAILED,
+        )
+
+    finally:
+        document_service.list_tenant_documents_by_status = (
+            original_list
+        )
+        clear_authentication_override()
+
+def test_list_documents_requires_authentication():
+    tenant_id = uuid4()
+
+    response = client.get(
+        f"/documents/{tenant_id}",
+    )
+
+    assert response.status_code == 401
+
+def test_list_documents_other_tenant_forbidden():
+    own_tenant_id = uuid4()
+    other_tenant_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.TENANT_ADMIN,
+        tenant_id=own_tenant_id,
+    )
+
+    try:
+        response = client.get(
+            f"/documents/{other_tenant_id}",
+            params={"status": "processing"},
+        )
+
+        assert response.status_code == 403
+
+    finally:
+        clear_authentication_override()
+
+def test_list_documents_invalid_status_returns_422():
+    tenant_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.TENANT_ADMIN,
+        tenant_id=tenant_id,
+    )
+
+    try:
+        response = client.get(
+            f"/documents/{tenant_id}",
+            params={"status": "invalid"},
+        )
+
+        assert response.status_code == 422
+
+    finally:
+        clear_authentication_override()

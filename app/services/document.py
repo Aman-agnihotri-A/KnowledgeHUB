@@ -90,6 +90,18 @@ class DocumentService:
             tenant_id,
         )
 
+    def list_tenant_documents_by_status(
+        self,
+        db: Session,
+        tenant_id: uuid.UUID,
+        status: DocumentStatus,
+    ) -> list[Document]:
+        return self.document_repository.list_by_tenant_and_status(
+            db,
+            tenant_id,
+            status,
+        )
+
     def update_document_status(
         self,
         db: Session,

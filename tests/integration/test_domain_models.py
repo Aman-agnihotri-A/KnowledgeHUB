@@ -334,3 +334,65 @@ def test_user_active_status_is_persisted() -> None:
 
         assert persisted_user is not None
         assert persisted_user.is_active is False
+
+def test_documents_can_be_filtered_by_status() -> None:
+    from sqlalchemy import select
+    from sqlalchemy.orm import Session
+
+    tenant = Tenant(
+        name="Filter Tenant",
+        slug="filter-tenant",
+    )
+
+    with Session(engine) as session:
+        session.add(tenant)
+        session.flush()
+
+        user = User(
+            tenant_id=tenant.id,
+            email="filter@example.com",
+            hashed_password="hashed-password",
+            full_name="Filter User",
+            role=UserRole.SUB_USER,
+            is_active=True,
+        )
+
+        session.add(user)
+        session.flush()
+
+        processing_document = Document(
+            tenant_id=tenant.id,
+            uploaded_by=user.id,
+            filename="processing.pdf",
+            storage_path="documents/processing.pdf",
+            status=DocumentStatus.PROCESSING,
+        )
+
+        ready_document = Document(
+            tenant_id=tenant.id,
+            uploaded_by=user.id,
+            filename="ready.pdf",
+            storage_path="documents/ready.pdf",
+            status=DocumentStatus.READY,
+        )
+
+        session.add_all(
+            [
+                processing_document,
+                ready_document,
+            ]
+        )
+        session.commit()
+
+        statement = select(Document).where(
+            Document.tenant_id == tenant.id,
+            Document.status == DocumentStatus.PROCESSING,
+        )
+
+        result = list(
+            session.scalars(statement).all()
+        )
+
+        assert len(result) == 1
+        assert result[0].filename == "processing.pdf"
+        assert result[0].status == DocumentStatus.PROCESSING
