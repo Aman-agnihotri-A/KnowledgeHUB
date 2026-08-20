@@ -10,7 +10,11 @@ from app.models.user import User
 
 from fastapi.testclient import TestClient
 
-from app.api.documents import document_service, retrieval_service
+from app.api.documents import (
+    document_service,
+    rag_service,
+    retrieval_service,
+)
 from app.core.security import create_access_token
 from app.main import app
 from app.models.enums import UserRole, DocumentStatus
@@ -1928,4 +1932,204 @@ def test_retrieve_documents_maps_service_error_to_bad_request():
         retrieval_service.retrieve = (
             original_retrieve
         )
+        clear_authentication_override()
+
+def test_ask_question_requires_authentication():
+    tenant_id = uuid4()
+
+    response = client.post(
+        f"/documents/{tenant_id}/ask",
+        json={
+            "question": "What is KnowledgeHub?",
+        },
+    )
+
+    assert response.status_code == 401
+
+
+def test_ask_question_rejects_cross_tenant_access():
+    requested_tenant_id = uuid4()
+    user_tenant_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.SUB_USER,
+        tenant_id=user_tenant_id,
+    )
+
+    try:
+        response = client.post(
+            f"/documents/{requested_tenant_id}/ask",
+            json={
+                "question": "What is KnowledgeHub?",
+            },
+        )
+
+        assert response.status_code == 403
+
+    finally:
+        clear_authentication_override()
+
+
+def test_ask_question_rejects_whitespace_question():
+    tenant_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.SUB_USER,
+        tenant_id=tenant_id,
+    )
+
+    original_ask = rag_service.ask
+
+    rag_service.ask = MagicMock(
+        side_effect=ValueError(
+            "Question cannot be empty."
+        )
+    )
+
+    try:
+        response = client.post(
+            f"/documents/{tenant_id}/ask",
+            json={
+                "question": "   ",
+            },
+        )
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == (
+            "Question cannot be empty."
+        )
+
+    finally:
+        rag_service.ask = original_ask
+        clear_authentication_override()
+
+def test_ask_question_returns_grounded_answer():
+    tenant_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.SUB_USER,
+        tenant_id=tenant_id,
+    )
+
+    source_chunk_id = uuid4()
+    document_id = uuid4()
+
+    rag_result = MagicMock()
+
+    rag_result.question = (
+        "What is KnowledgeHub?"
+    )
+    rag_result.answer = (
+        "KnowledgeHub is a knowledge platform."
+    )
+    rag_result.abstained = False
+
+    source = MagicMock()
+    source.chunk_id = source_chunk_id
+    source.document_id = document_id
+    source.document_filename = "handbook.pdf"
+    source.chunk_index = 0
+    source.similarity = 0.95
+
+    rag_result.sources = [source]
+
+    original_ask = rag_service.ask
+
+    rag_service.ask = MagicMock(
+        return_value=rag_result,
+    )
+
+    try:
+        response = client.post(
+            f"/documents/{tenant_id}/ask",
+            json={
+                "question": "What is KnowledgeHub?",
+                "top_k": 3,
+            },
+        )
+
+        assert response.status_code == 200
+
+        body = response.json()
+
+        assert body["question"] == (
+            "What is KnowledgeHub?"
+        )
+
+        assert body["answer"] == (
+            "KnowledgeHub is a knowledge platform."
+        )
+
+        assert body["abstained"] is False
+
+        assert len(body["sources"]) == 1
+
+        assert (
+            body["sources"][0]["chunk_id"]
+            == str(source_chunk_id)
+        )
+
+        assert (
+            body["sources"][0]["document_id"]
+            == str(document_id)
+        )
+
+        assert (
+            body["sources"][0][
+                "document_filename"
+            ]
+            == "handbook.pdf"
+        )
+
+        rag_service.ask.assert_called_once_with(
+            ANY,
+            tenant_id=tenant_id,
+            question="What is KnowledgeHub?",
+            top_k=3,
+        )
+
+    finally:
+        rag_service.ask = original_ask
+        clear_authentication_override()
+
+
+def test_ask_question_can_abstain():
+    tenant_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.SUB_USER,
+        tenant_id=tenant_id,
+    )
+
+    rag_result = MagicMock()
+
+    rag_result.question = "Unknown question"
+    rag_result.answer = None
+    rag_result.abstained = True
+    rag_result.sources = []
+
+    original_ask = rag_service.ask
+
+    rag_service.ask = MagicMock(
+        return_value=rag_result,
+    )
+
+    try:
+        response = client.post(
+            f"/documents/{tenant_id}/ask",
+            json={
+                "question": "Unknown question",
+            },
+        )
+
+        assert response.status_code == 200
+
+        body = response.json()
+
+        assert body["answer"] is None
+        assert body["abstained"] is True
+        assert body["sources"] == []
+
+    finally:
+        rag_service.ask = original_ask
         clear_authentication_override()
