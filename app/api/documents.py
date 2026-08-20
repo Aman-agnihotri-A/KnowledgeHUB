@@ -120,6 +120,40 @@ async def upload_document(
 
     return document
 
+@router.post(
+    "/{tenant_id}/{document_id}/process",
+    response_model=DocumentRead,
+)
+def process_document(
+    tenant_id: uuid.UUID,
+    document_id: uuid.UUID,
+    current_user: User = Depends(
+        require_tenant_admin_access,
+    ),
+    db: Session = Depends(get_db),
+) -> DocumentRead:
+    try:
+        return document_service.process_document(
+            db,
+            document_id=document_id,
+            tenant_id=tenant_id,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except ValueError as exc:
+        if str(exc) == "Document not found.":
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(exc),
+            ) from exc
+
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
 
 @router.get(
     "/{tenant_id}/{document_id}",
@@ -254,3 +288,4 @@ def update_document_status(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
         ) from exc
+

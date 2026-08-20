@@ -7,7 +7,12 @@ from sqlalchemy.orm import Session
 from app.models.document import Document
 from app.models.enums import DocumentStatus, UserRole
 from app.repositories.document import DocumentRepository
+from app.repositories.document_chunk import (
+    DocumentChunkRepository,
+)
 from app.repositories.user import UserRepository
+from app.services.chunking import TextChunkingService
+from app.services.document_text import DocumentTextService
 from app.services.storage import StorageService
 
 
@@ -17,6 +22,15 @@ class DocumentService:
         document_repository: DocumentRepository | None = None,
         user_repository: UserRepository | None = None,
         storage_service: StorageService | None = None,
+        document_chunk_repository: (
+            DocumentChunkRepository | None
+        ) = None,
+        document_text_service: (
+            DocumentTextService | None
+        ) = None,
+        chunking_service: (
+            TextChunkingService | None
+        ) = None,
     ) -> None:
         self.document_repository = (
             document_repository or DocumentRepository()
@@ -27,6 +41,21 @@ class DocumentService:
         )
 
         self.storage_service = storage_service
+
+        self.document_chunk_repository = (
+            document_chunk_repository
+            or DocumentChunkRepository()
+        )
+
+        self.document_text_service = (
+            document_text_service
+            or DocumentTextService()
+        )
+
+        self.chunking_service = (
+            chunking_service
+            or TextChunkingService()
+        )
 
     def create_document(
         self,
@@ -192,10 +221,13 @@ class DocumentService:
         tenant_id: uuid.UUID,
         status: DocumentStatus,
     ) -> list[Document]:
-        return self.document_repository.list_by_tenant_and_status(
-            db,
-            tenant_id,
-            status,
+        return (
+            self.document_repository
+            .list_by_tenant_and_status(
+                db,
+                tenant_id,
+                status,
+            )
         )
 
     def update_document_status(
@@ -255,3 +287,86 @@ class DocumentService:
             document,
             status,
         )
+
+    def process_document(
+        self,
+        db: Session,
+        *,
+        document_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+    ) -> Document:
+        if self.storage_service is None:
+            raise ValueError(
+                "Document storage is not configured."
+            )
+
+        document = self.get_document(
+            db,
+            document_id,
+            tenant_id,
+        )
+
+        if document is None:
+            raise ValueError(
+                "Document not found."
+            )
+
+        if document.status == DocumentStatus.READY:
+            return document
+
+        path = self.storage_service.open(
+            document.storage_path,
+        )
+
+        if path is None:
+            raise FileNotFoundError(
+                "Document file not found."
+            )
+
+        self.document_repository.update_status(
+            db,
+            document,
+            DocumentStatus.PROCESSING,
+        )
+
+        try:
+            content = path.read_bytes()
+
+            text = self.document_text_service.extract_text(
+                content=content,
+                filename=document.filename,
+            )
+
+            chunks = self.chunking_service.split(
+                text,
+            )
+
+            if not chunks:
+                raise ValueError(
+                    "Document produced no text chunks."
+                )
+
+            self.document_chunk_repository.delete_by_document(
+                db,
+                document.id,
+            )
+
+            self.document_chunk_repository.create_many(
+                db,
+                document_id=document.id,
+                chunks=chunks,
+            )
+
+            return self.document_repository.update_status(
+                db,
+                document,
+                DocumentStatus.READY,
+            )
+
+        except Exception:
+            self.document_repository.update_status(
+                db,
+                document,
+                DocumentStatus.FAILED,
+            )
+            raise
