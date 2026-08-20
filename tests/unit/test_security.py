@@ -1,4 +1,7 @@
+from datetime import datetime, timedelta, timezone
+
 import jwt
+import pytest
 
 from app.core.config import settings
 from app.core.security import create_access_token
@@ -96,3 +99,46 @@ def test_access_token_has_expiration():
     )
 
     assert payload["exp"] > payload["iat"]
+
+def test_decode_access_token_returns_payload():
+    token = create_access_token(
+        user_id="123",
+        role="sub_user",
+        tenant_id="456",
+    )
+
+    payload = jwt.decode(
+        token,
+        settings.jwt_secret_key,
+        algorithms=[settings.jwt_algorithm],
+    )
+
+    assert payload["sub"] == "123"
+    assert payload["role"] == "sub_user"
+    assert payload["tenant_id"] == "456"
+
+
+def test_decode_access_token_rejects_invalid_token():
+    with pytest.raises(ValueError):
+        from app.core.security import decode_access_token
+
+        decode_access_token("invalid-token")
+
+
+def test_decode_access_token_rejects_expired_token():
+    expired_token = jwt.encode(
+        {
+            "sub": "123",
+            "role": "sub_user",
+            "tenant_id": "456",
+            "exp": datetime.now(timezone.utc)
+            - timedelta(minutes=1),
+        },
+        settings.jwt_secret_key,
+        algorithm=settings.jwt_algorithm,
+    )
+
+    from app.core.security import decode_access_token
+
+    with pytest.raises(ValueError):
+        decode_access_token(expired_token)

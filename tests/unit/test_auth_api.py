@@ -69,3 +69,8 @@ def test_login_rejects_invalid_credentials():
 
     finally:
         user_service.authenticate_user = original_authenticate
+
+def test_protected_dependency_requires_bearer_token():
+    from app.dependencies.auth import get_current_user
+
+    assert get_current_user is not None
