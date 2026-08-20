@@ -4,10 +4,16 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.dependencies.authorization import require_tenant_access
-from app.dependencies.auth import get_current_user
+from app.dependencies.authorization import (
+    require_tenant_access,
+    require_tenant_admin_access,
+)
 from app.models.user import User
-from app.schemas.document import DocumentCreate, DocumentRead
+from app.schemas.document import (
+    DocumentCreate,
+    DocumentRead,
+    DocumentStatusUpdate,
+)
 from app.services.document import DocumentService
 
 
@@ -85,3 +91,34 @@ def list_documents(
         db,
         tenant_id,
     )
+
+
+@router.patch(
+    "/{tenant_id}/{document_id}/status",
+    response_model=DocumentRead,
+)
+def update_document_status(
+    tenant_id: uuid.UUID,
+    document_id: uuid.UUID,
+    payload: DocumentStatusUpdate,
+    current_user: User = Depends(require_tenant_admin_access),
+    db: Session = Depends(get_db),
+) -> DocumentRead:
+    try:
+        return document_service.update_document_status(
+            db,
+            document_id=document_id,
+            tenant_id=tenant_id,
+            status=payload.status,
+        )
+    except ValueError as exc:
+        if str(exc) == "Document not found.":
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(exc),
+            ) from exc
+
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc

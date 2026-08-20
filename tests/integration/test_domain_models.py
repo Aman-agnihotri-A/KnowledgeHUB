@@ -249,3 +249,49 @@ def test_uuid_primary_keys_are_generated() -> None:
         session.commit()
 
         assert isinstance(tenant.id, uuid.UUID)
+
+def test_document_status_is_persisted() -> None:
+    from sqlalchemy.orm import Session
+
+    tenant = Tenant(
+        name="Status Tenant",
+        slug="status-tenant",
+    )
+
+    with Session(engine) as session:
+        session.add(tenant)
+        session.flush()
+
+        user = User(
+            tenant_id=tenant.id,
+            email="status-admin@example.com",
+            hashed_password="hashed-password",
+            full_name="Status Admin",
+            role=UserRole.TENANT_ADMIN,
+        )
+
+        session.add(user)
+        session.flush()
+
+        document = Document(
+            tenant_id=tenant.id,
+            uploaded_by=user.id,
+            filename="status-test.pdf",
+            storage_path="documents/status-test.pdf",
+            status=DocumentStatus.PROCESSING,
+        )
+
+        session.add(document)
+        session.commit()
+
+        document_id = document.id
+
+        session.expire_all()
+
+        persisted_document = session.get(
+            Document,
+            document_id,
+        )
+
+        assert persisted_document is not None
+        assert persisted_document.status == DocumentStatus.PROCESSING

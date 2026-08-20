@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 from app.api.documents import document_service
 from app.core.security import create_access_token
 from app.main import app
-from app.models.enums import UserRole
+from app.models.enums import UserRole, DocumentStatus
 
 
 client = TestClient(app)
@@ -111,7 +111,7 @@ def test_create_document_uses_authenticated_user_identity():
     document.uploaded_by = user.id
     document.filename = "knowledge.pdf"
     document.storage_path = "documents/knowledge.pdf"
-    document.status = "UPLOADED"
+    document.status = DocumentStatus.UPLOADED
 
     original_service = document_service.create_document
     document_service.create_document = MagicMock(
@@ -160,7 +160,7 @@ def test_create_document_tenant_admin_own_tenant():
     document.uploaded_by = user.id
     document.filename = "knowledge.pdf"
     document.storage_path = "documents/knowledge.pdf"
-    document.status = "UPLOADED"
+    document.status = DocumentStatus.UPLOADED
 
     original_service = document_service.create_document
     document_service.create_document = MagicMock(
@@ -249,7 +249,7 @@ def test_create_document_super_admin_can_access_other_tenant():
     document.uploaded_by = user.id
     document.filename = "knowledge.pdf"
     document.storage_path = "documents/knowledge.pdf"
-    document.status = "UPLOADED"
+    document.status = DocumentStatus.UPLOADED
 
     original_service = document_service.create_document
     document_service.create_document = MagicMock(
@@ -451,7 +451,7 @@ def test_get_document_tenant_admin_own_tenant():
             uploaded_by=uuid4(),
             filename="knowledge.pdf",
             storage_path="documents/knowledge.pdf",
-            status="UPLOADED",
+            status=DocumentStatus.UPLOADED,
         ),
     )
 
@@ -469,6 +469,7 @@ def test_get_document_tenant_admin_own_tenant():
 
 
 def test_get_document_tenant_admin_other_tenant():
+
     user_tenant_id = uuid4()
     requested_tenant_id = uuid4()
     document_id = uuid4()
@@ -506,7 +507,7 @@ def test_get_document_sub_user_own_tenant():
             uploaded_by=uuid4(),
             filename="knowledge.pdf",
             storage_path="documents/knowledge.pdf",
-            status="UPLOADED",
+            status=DocumentStatus.UPLOADED,
         ),
     )
 
@@ -560,7 +561,7 @@ def test_get_document_super_admin_other_tenant():
             uploaded_by=uuid4(),
             filename="knowledge.pdf",
             storage_path="documents/knowledge.pdf",
-            status="UPLOADED",
+            status=DocumentStatus.UPLOADED,
         ),
     )
 
@@ -600,4 +601,287 @@ def test_get_document_not_found_for_authorized_user():
 
     finally:
         document_service.get_document = original_service
+        clear_authentication_override()
+
+def test_update_document_status_requires_authentication():
+    tenant_id = uuid4()
+    document_id = uuid4()
+
+    response = client.patch(
+        f"/documents/{tenant_id}/{document_id}/status",
+        json={
+            "status": "processing",
+        },
+    )
+
+    assert response.status_code == 401
+
+
+def test_update_document_status_rejects_invalid_jwt():
+    tenant_id = uuid4()
+    document_id = uuid4()
+
+    response = client.patch(
+        f"/documents/{tenant_id}/{document_id}/status",
+        headers={
+            "Authorization": "Bearer invalid-token",
+        },
+        json={
+            "status": "processing",
+        },
+    )
+
+    assert response.status_code == 401
+
+
+def test_update_document_status_tenant_admin_own_tenant():
+    tenant_id = uuid4()
+    document_id = uuid4()
+
+    user = authenticate_as(
+        role=UserRole.TENANT_ADMIN,
+        tenant_id=tenant_id,
+    )
+
+    document = MagicMock()
+    document.id = document_id
+    document.tenant_id = tenant_id
+    document.uploaded_by = user.id
+    document.filename = "knowledge.pdf"
+    document.storage_path = "documents/knowledge.pdf"
+    document.status = DocumentStatus.PROCESSING
+
+    original_service = document_service.update_document_status
+    document_service.update_document_status = MagicMock(
+        return_value=document,
+    )
+
+    try:
+        response = client.patch(
+            f"/documents/{tenant_id}/{document_id}/status",
+            json={
+                "status": "processing",
+            },
+        )
+
+        assert response.status_code == 200
+
+        document_service.update_document_status.assert_called_once_with(
+            ANY,
+            document_id=document_id,
+            tenant_id=tenant_id,
+            status=DocumentStatus.PROCESSING,
+        )
+
+    finally:
+        document_service.update_document_status = original_service
+        clear_authentication_override()
+
+
+def test_update_document_status_super_admin_other_tenant():
+    tenant_id = uuid4()
+    document_id = uuid4()
+
+    user = authenticate_as(
+        role=UserRole.SUPER_ADMIN,
+        tenant_id=None,
+    )
+
+    document = MagicMock()
+    document.id = document_id
+    document.tenant_id = tenant_id
+    document.uploaded_by = user.id
+    document.filename = "knowledge.pdf"
+    document.storage_path = "documents/knowledge.pdf"
+    document.status = DocumentStatus.PROCESSING
+
+    original_service = document_service.update_document_status
+    document_service.update_document_status = MagicMock(
+        return_value=document,
+    )
+
+    try:
+        response = client.patch(
+            f"/documents/{tenant_id}/{document_id}/status",
+            json={
+                "status": "processing",
+            },
+        )
+
+        assert response.status_code == 200
+
+    finally:
+        document_service.update_document_status = original_service
+        clear_authentication_override()
+
+
+def test_update_document_status_tenant_admin_other_tenant():
+    user_tenant_id = uuid4()
+    requested_tenant_id = uuid4()
+    document_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.TENANT_ADMIN,
+        tenant_id=user_tenant_id,
+    )
+
+    try:
+        response = client.patch(
+            f"/documents/{requested_tenant_id}/{document_id}/status",
+            json={
+                "status": "processing",
+            },
+        )
+
+        assert response.status_code == 403
+
+    finally:
+        clear_authentication_override()
+
+
+def test_update_document_status_sub_user_forbidden():
+    tenant_id = uuid4()
+    document_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.SUB_USER,
+        tenant_id=tenant_id,
+    )
+
+    try:
+        response = client.patch(
+            f"/documents/{tenant_id}/{document_id}/status",
+            json={
+                "status": "processing",
+            },
+        )
+
+        assert response.status_code == 403
+
+    finally:
+        clear_authentication_override()
+
+
+def test_update_document_status_invalid_transition_returns_400():
+    tenant_id = uuid4()
+    document_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.TENANT_ADMIN,
+        tenant_id=tenant_id,
+    )
+
+    original_service = document_service.update_document_status
+    document_service.update_document_status = MagicMock(
+        side_effect=ValueError(
+            "Invalid document status transition: "
+            "uploaded -> ready."
+        ),
+    )
+
+    try:
+        response = client.patch(
+            f"/documents/{tenant_id}/{document_id}/status",
+            json={
+                "status": "ready",
+            },
+        )
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == (
+            "Invalid document status transition: "
+            "uploaded -> ready."
+        )
+
+    finally:
+        document_service.update_document_status = original_service
+        clear_authentication_override()
+
+
+def test_update_document_status_missing_document_returns_404():
+    tenant_id = uuid4()
+    document_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.TENANT_ADMIN,
+        tenant_id=tenant_id,
+    )
+
+    original_service = document_service.update_document_status
+    document_service.update_document_status = MagicMock(
+        side_effect=ValueError(
+            "Document not found."
+        ),
+    )
+
+    try:
+        response = client.patch(
+            f"/documents/{tenant_id}/{document_id}/status",
+            json={
+                "status": "processing",
+            },
+        )
+
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Document not found."
+
+    finally:
+        document_service.update_document_status = original_service
+        clear_authentication_override()
+
+
+def test_update_document_status_cross_tenant_document_returns_400():
+    tenant_id = uuid4()
+    document_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.TENANT_ADMIN,
+        tenant_id=tenant_id,
+    )
+
+    original_service = document_service.update_document_status
+    document_service.update_document_status = MagicMock(
+        side_effect=ValueError(
+            "Document does not belong to the specified tenant."
+        ),
+    )
+
+    try:
+        response = client.patch(
+            f"/documents/{tenant_id}/{document_id}/status",
+            json={
+                "status": "processing",
+            },
+        )
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == (
+            "Document does not belong to the specified tenant."
+        )
+
+    finally:
+        document_service.update_document_status = original_service
+        clear_authentication_override()
+
+
+def test_update_document_status_invalid_status_returns_422():
+    tenant_id = uuid4()
+    document_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.TENANT_ADMIN,
+        tenant_id=tenant_id,
+    )
+
+    try:
+        response = client.patch(
+            f"/documents/{tenant_id}/{document_id}/status",
+            json={
+                "status": "invalid_status",
+            },
+        )
+
+        assert response.status_code == 422
+
+    finally:
         clear_authentication_override()

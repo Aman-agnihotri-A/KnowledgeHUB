@@ -127,3 +127,27 @@ def test_update_document_status():
 
     db.commit.assert_called_once()
     db.refresh.assert_called_once_with(document)
+
+def test_update_document_status_to_failed():
+    db = MagicMock()
+    repository = DocumentRepository()
+
+    document = Document(
+        tenant_id=uuid4(),
+        uploaded_by=uuid4(),
+        filename="knowledge.pdf",
+        storage_path="documents/knowledge.pdf",
+        status=DocumentStatus.PROCESSING,
+    )
+
+    result = repository.update_status(
+        db,
+        document,
+        DocumentStatus.FAILED,
+    )
+
+    assert result is document
+    assert document.status == DocumentStatus.FAILED
+
+    db.commit.assert_called_once()
+    db.refresh.assert_called_once_with(document)

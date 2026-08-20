@@ -3,8 +3,7 @@ import uuid
 from sqlalchemy.orm import Session
 
 from app.models.document import Document
-from app.models.enums import UserRole
-from app.models.user import User
+from app.models.enums import DocumentStatus, UserRole
 from app.repositories.document import DocumentRepository
 from app.repositories.user import UserRepository
 
@@ -89,4 +88,60 @@ class DocumentService:
         return self.document_repository.list_by_tenant(
             db,
             tenant_id,
+        )
+
+    def update_document_status(
+        self,
+        db: Session,
+        *,
+        document_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        status: DocumentStatus,
+    ) -> Document:
+        document = self.document_repository.get_by_id(
+            db,
+            document_id,
+        )
+
+        if document is None:
+            raise ValueError("Document not found.")
+
+        if document.tenant_id != tenant_id:
+            raise ValueError(
+                "Document does not belong to the specified tenant."
+            )
+
+        allowed_transitions: dict[
+            DocumentStatus,
+            set[DocumentStatus],
+        ] = {
+            DocumentStatus.UPLOADED: {
+                DocumentStatus.PROCESSING,
+                DocumentStatus.FAILED,
+            },
+            DocumentStatus.PROCESSING: {
+                DocumentStatus.READY,
+                DocumentStatus.FAILED,
+            },
+            DocumentStatus.READY: set(),
+            DocumentStatus.FAILED: {
+                DocumentStatus.PROCESSING,
+            },
+        }
+
+        current_status = document.status
+
+        if status == current_status:
+            return document
+
+        if status not in allowed_transitions[current_status]:
+            raise ValueError(
+                f"Invalid document status transition: "
+                f"{current_status.value} -> {status.value}."
+            )
+
+        return self.document_repository.update_status(
+            db,
+            document,
+            status,
         )

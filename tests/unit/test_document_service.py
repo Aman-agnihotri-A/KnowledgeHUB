@@ -4,7 +4,7 @@ from uuid import uuid4
 import pytest
 
 from app.models.document import Document
-from app.models.enums import UserRole
+from app.models.enums import DocumentStatus, UserRole
 from app.models.user import User
 from app.services.document import DocumentService
 
@@ -292,3 +292,416 @@ def test_list_tenant_documents():
         db,
         tenant_id,
     )
+
+def test_update_document_status_uploaded_to_processing():
+    db = MagicMock()
+    document_repository = MagicMock()
+    user_repository = MagicMock()
+
+    service = DocumentService(
+        document_repository=document_repository,
+        user_repository=user_repository,
+    )
+
+    tenant_id = uuid4()
+
+    document = Document(
+        tenant_id=tenant_id,
+        uploaded_by=uuid4(),
+        filename="knowledge.pdf",
+        storage_path="documents/knowledge.pdf",
+        status=DocumentStatus.UPLOADED,
+    )
+
+    document_repository.get_by_id.return_value = document
+    document_repository.update_status.return_value = document
+
+    result = service.update_document_status(
+        db,
+        document_id=document.id,
+        tenant_id=tenant_id,
+        status=DocumentStatus.PROCESSING,
+    )
+
+    assert result is document
+
+    document_repository.get_by_id.assert_called_once_with(
+        db,
+        document.id,
+    )
+
+    document_repository.update_status.assert_called_once_with(
+        db,
+        document,
+        DocumentStatus.PROCESSING,
+    )
+
+
+def test_update_document_status_processing_to_ready():
+    db = MagicMock()
+    document_repository = MagicMock()
+    user_repository = MagicMock()
+
+    service = DocumentService(
+        document_repository=document_repository,
+        user_repository=user_repository,
+    )
+
+    tenant_id = uuid4()
+
+    document = Document(
+        tenant_id=tenant_id,
+        uploaded_by=uuid4(),
+        filename="knowledge.pdf",
+        storage_path="documents/knowledge.pdf",
+        status=DocumentStatus.PROCESSING,
+    )
+
+    document_repository.get_by_id.return_value = document
+    document_repository.update_status.return_value = document
+
+    result = service.update_document_status(
+        db,
+        document_id=document.id,
+        tenant_id=tenant_id,
+        status=DocumentStatus.READY,
+    )
+
+    assert result is document
+
+    document_repository.update_status.assert_called_once_with(
+        db,
+        document,
+        DocumentStatus.READY,
+    )
+
+
+def test_update_document_status_processing_to_failed():
+    db = MagicMock()
+    document_repository = MagicMock()
+    user_repository = MagicMock()
+
+    service = DocumentService(
+        document_repository=document_repository,
+        user_repository=user_repository,
+    )
+
+    tenant_id = uuid4()
+
+    document = Document(
+        tenant_id=tenant_id,
+        uploaded_by=uuid4(),
+        filename="knowledge.pdf",
+        storage_path="documents/knowledge.pdf",
+        status=DocumentStatus.PROCESSING,
+    )
+
+    document_repository.get_by_id.return_value = document
+    document_repository.update_status.return_value = document
+
+    result = service.update_document_status(
+        db,
+        document_id=document.id,
+        tenant_id=tenant_id,
+        status=DocumentStatus.FAILED,
+    )
+
+    assert result is document
+
+    document_repository.update_status.assert_called_once_with(
+        db,
+        document,
+        DocumentStatus.FAILED,
+    )
+
+
+def test_update_document_status_uploaded_to_failed():
+    db = MagicMock()
+    document_repository = MagicMock()
+    user_repository = MagicMock()
+
+    service = DocumentService(
+        document_repository=document_repository,
+        user_repository=user_repository,
+    )
+
+    tenant_id = uuid4()
+
+    document = Document(
+        tenant_id=tenant_id,
+        uploaded_by=uuid4(),
+        filename="knowledge.pdf",
+        storage_path="documents/knowledge.pdf",
+        status=DocumentStatus.UPLOADED,
+    )
+
+    document_repository.get_by_id.return_value = document
+    document_repository.update_status.return_value = document
+
+    result = service.update_document_status(
+        db,
+        document_id=document.id,
+        tenant_id=tenant_id,
+        status=DocumentStatus.FAILED,
+    )
+
+    assert result is document
+
+    document_repository.update_status.assert_called_once_with(
+        db,
+        document,
+        DocumentStatus.FAILED,
+    )
+
+
+def test_update_document_status_failed_to_processing():
+    db = MagicMock()
+    document_repository = MagicMock()
+    user_repository = MagicMock()
+
+    service = DocumentService(
+        document_repository=document_repository,
+        user_repository=user_repository,
+    )
+
+    tenant_id = uuid4()
+
+    document = Document(
+        tenant_id=tenant_id,
+        uploaded_by=uuid4(),
+        filename="knowledge.pdf",
+        storage_path="documents/knowledge.pdf",
+        status=DocumentStatus.FAILED,
+    )
+
+    document_repository.get_by_id.return_value = document
+    document_repository.update_status.return_value = document
+
+    result = service.update_document_status(
+        db,
+        document_id=document.id,
+        tenant_id=tenant_id,
+        status=DocumentStatus.PROCESSING,
+    )
+
+    assert result is document
+
+    document_repository.update_status.assert_called_once_with(
+        db,
+        document,
+        DocumentStatus.PROCESSING,
+    )
+
+
+def test_update_document_status_same_status_is_idempotent():
+    db = MagicMock()
+    document_repository = MagicMock()
+    user_repository = MagicMock()
+
+    service = DocumentService(
+        document_repository=document_repository,
+        user_repository=user_repository,
+    )
+
+    tenant_id = uuid4()
+
+    document = Document(
+        tenant_id=tenant_id,
+        uploaded_by=uuid4(),
+        filename="knowledge.pdf",
+        storage_path="documents/knowledge.pdf",
+        status=DocumentStatus.PROCESSING,
+    )
+
+    document_repository.get_by_id.return_value = document
+
+    result = service.update_document_status(
+        db,
+        document_id=document.id,
+        tenant_id=tenant_id,
+        status=DocumentStatus.PROCESSING,
+    )
+
+    assert result is document
+
+    document_repository.update_status.assert_not_called()
+
+
+def test_update_document_status_rejects_uploaded_to_ready():
+    db = MagicMock()
+    document_repository = MagicMock()
+    user_repository = MagicMock()
+
+    service = DocumentService(
+        document_repository=document_repository,
+        user_repository=user_repository,
+    )
+
+    tenant_id = uuid4()
+
+    document = Document(
+        tenant_id=tenant_id,
+        uploaded_by=uuid4(),
+        filename="knowledge.pdf",
+        storage_path="documents/knowledge.pdf",
+        status=DocumentStatus.UPLOADED,
+    )
+
+    document_repository.get_by_id.return_value = document
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "Invalid document status transition: "
+            "uploaded -> ready."
+        ),
+    ):
+        service.update_document_status(
+            db,
+            document_id=document.id,
+            tenant_id=tenant_id,
+            status=DocumentStatus.READY,
+        )
+
+    document_repository.update_status.assert_not_called()
+
+
+def test_update_document_status_rejects_ready_to_failed():
+    db = MagicMock()
+    document_repository = MagicMock()
+    user_repository = MagicMock()
+
+    service = DocumentService(
+        document_repository=document_repository,
+        user_repository=user_repository,
+    )
+
+    tenant_id = uuid4()
+
+    document = Document(
+        tenant_id=tenant_id,
+        uploaded_by=uuid4(),
+        filename="knowledge.pdf",
+        storage_path="documents/knowledge.pdf",
+        status=DocumentStatus.READY,
+    )
+
+    document_repository.get_by_id.return_value = document
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "Invalid document status transition: "
+            "ready -> failed."
+        ),
+    ):
+        service.update_document_status(
+            db,
+            document_id=document.id,
+            tenant_id=tenant_id,
+            status=DocumentStatus.FAILED,
+        )
+
+    document_repository.update_status.assert_not_called()
+
+
+def test_update_document_status_rejects_ready_to_processing():
+    db = MagicMock()
+    document_repository = MagicMock()
+    user_repository = MagicMock()
+
+    service = DocumentService(
+        document_repository=document_repository,
+        user_repository=user_repository,
+    )
+
+    tenant_id = uuid4()
+
+    document = Document(
+        tenant_id=tenant_id,
+        uploaded_by=uuid4(),
+        filename="knowledge.pdf",
+        storage_path="documents/knowledge.pdf",
+        status=DocumentStatus.READY,
+    )
+
+    document_repository.get_by_id.return_value = document
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "Invalid document status transition: "
+            "ready -> processing."
+        ),
+    ):
+        service.update_document_status(
+            db,
+            document_id=document.id,
+            tenant_id=tenant_id,
+            status=DocumentStatus.PROCESSING,
+        )
+
+    document_repository.update_status.assert_not_called()
+
+
+def test_update_document_status_rejects_cross_tenant_document():
+    db = MagicMock()
+    document_repository = MagicMock()
+    user_repository = MagicMock()
+
+    service = DocumentService(
+        document_repository=document_repository,
+        user_repository=user_repository,
+    )
+
+    document_tenant_id = uuid4()
+    requested_tenant_id = uuid4()
+
+    document = Document(
+        tenant_id=document_tenant_id,
+        uploaded_by=uuid4(),
+        filename="secret.pdf",
+        storage_path="documents/secret.pdf",
+        status=DocumentStatus.UPLOADED,
+    )
+
+    document_repository.get_by_id.return_value = document
+
+    with pytest.raises(
+        ValueError,
+        match="Document does not belong to the specified tenant.",
+    ):
+        service.update_document_status(
+            db,
+            document_id=document.id,
+            tenant_id=requested_tenant_id,
+            status=DocumentStatus.PROCESSING,
+        )
+
+    document_repository.update_status.assert_not_called()
+
+
+def test_update_document_status_rejects_missing_document():
+    db = MagicMock()
+    document_repository = MagicMock()
+    user_repository = MagicMock()
+
+    service = DocumentService(
+        document_repository=document_repository,
+        user_repository=user_repository,
+    )
+
+    document_repository.get_by_id.return_value = None
+
+    with pytest.raises(
+        ValueError,
+        match="Document not found.",
+    ):
+        service.update_document_status(
+            db,
+            document_id=uuid4(),
+            tenant_id=uuid4(),
+            status=DocumentStatus.PROCESSING,
+        )
+
+    document_repository.update_status.assert_not_called()

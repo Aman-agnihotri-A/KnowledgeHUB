@@ -71,3 +71,11 @@ def test_document_chunk_has_unique_document_index_constraint() -> None:
     }
 
     assert "uq_document_chunks_document_index" in constraints
+
+def test_document_status_values():
+    from app.models.enums import DocumentStatus
+
+    assert DocumentStatus.UPLOADED.value == "uploaded"
+    assert DocumentStatus.PROCESSING.value == "processing"
+    assert DocumentStatus.READY.value == "ready"
+    assert DocumentStatus.FAILED.value == "failed"
