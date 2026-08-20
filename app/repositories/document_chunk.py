@@ -3,7 +3,9 @@ import uuid
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app.models.document_chunk import DocumentChunk
+from app.models.document_chunk import (
+    DocumentChunk,
+)
 
 
 class DocumentChunkRepository:
@@ -14,7 +16,8 @@ class DocumentChunkRepository:
     ) -> None:
         db.execute(
             delete(DocumentChunk).where(
-                DocumentChunk.document_id == document_id
+                DocumentChunk.document_id
+                == document_id
             )
         )
 
@@ -31,7 +34,9 @@ class DocumentChunkRepository:
                 chunk_index=index,
                 content=content,
             )
-            for index, content in enumerate(chunks)
+            for index, content in enumerate(
+                chunks
+            )
         ]
 
         if documents:
@@ -41,6 +46,34 @@ class DocumentChunkRepository:
 
         return documents
 
+    def update_embeddings(
+        self,
+        db: Session,
+        embeddings: dict[
+            uuid.UUID,
+            list[float],
+        ],
+    ) -> None:
+        if not embeddings:
+            return
+
+        chunks = list(
+            db.scalars(
+                select(DocumentChunk).where(
+                    DocumentChunk.id.in_(
+                        list(embeddings.keys())
+                    )
+                )
+            ).all()
+        )
+
+        for chunk in chunks:
+            chunk.embedding = embeddings[
+                chunk.id
+            ]
+
+        db.flush()
+
     def list_by_document(
         self,
         db: Session,
@@ -49,7 +82,8 @@ class DocumentChunkRepository:
         statement = (
             select(DocumentChunk)
             .where(
-                DocumentChunk.document_id == document_id
+                DocumentChunk.document_id
+                == document_id
             )
             .order_by(
                 DocumentChunk.chunk_index.asc()

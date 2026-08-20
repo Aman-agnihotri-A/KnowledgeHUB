@@ -42,6 +42,15 @@ def test_migrations_upgrade_to_head() -> None:
         assert "users" in tables
         assert "documents" in tables
         assert "document_chunks" in tables
+        chunk_columns = {
+            column["name"]: column
+            for column in inspector.get_columns(
+                "document_chunks"
+            )
+        }
+
+        assert "embedding" in chunk_columns
+        assert chunk_columns["embedding"]["nullable"] is True
 
 
 def test_migrations_can_downgrade_and_upgrade() -> None:
@@ -109,6 +118,7 @@ def test_migrations_can_downgrade_and_upgrade() -> None:
             )
         }
 
+        
         assert tenant_columns["created_at"]["default"] is not None
         assert tenant_columns["updated_at"]["default"] is not None
 
@@ -120,3 +130,4 @@ def test_migrations_can_downgrade_and_upgrade() -> None:
 
         assert chunk_columns["created_at"]["default"] is not None
         assert chunk_columns["updated_at"]["default"] is not None
+        assert "embedding" in chunk_columns

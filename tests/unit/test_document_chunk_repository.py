@@ -160,3 +160,74 @@ def test_create_many_assigns_sequential_indexes():
     )
 
     db.flush.assert_called_once()
+
+def test_update_embeddings():
+    db = MagicMock()
+
+    repository = DocumentChunkRepository()
+
+    first_id = uuid4()
+    second_id = uuid4()
+
+    first = DocumentChunk(
+        document_id=uuid4(),
+        chunk_index=0,
+        content="First",
+    )
+
+    first.id = first_id
+
+    second = DocumentChunk(
+        document_id=first.document_id,
+        chunk_index=1,
+        content="Second",
+    )
+
+    second.id = second_id
+
+    db.scalars.return_value.all.return_value = [
+        first,
+        second,
+    ]
+
+    embeddings = {
+        first_id: [
+            0.1,
+            0.2,
+        ],
+        second_id: [
+            0.3,
+            0.4,
+        ],
+    }
+
+    repository.update_embeddings(
+        db,
+        embeddings,
+    )
+
+    assert first.embedding == [
+        0.1,
+        0.2,
+    ]
+
+    assert second.embedding == [
+        0.3,
+        0.4,
+    ]
+
+    db.flush.assert_called_once()
+
+
+def test_update_embeddings_with_empty_mapping():
+    db = MagicMock()
+
+    repository = DocumentChunkRepository()
+
+    repository.update_embeddings(
+        db,
+        {},
+    )
+
+    db.scalars.assert_not_called()
+    db.flush.assert_not_called()

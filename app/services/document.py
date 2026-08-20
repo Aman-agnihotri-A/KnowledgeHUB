@@ -14,6 +14,13 @@ from app.repositories.user import UserRepository
 from app.services.chunking import TextChunkingService
 from app.services.document_text import DocumentTextService
 from app.services.storage import StorageService
+from app.services.chunk_embedding import (
+    ChunkEmbeddingService,
+)
+from app.services.embedding import (
+    DeterministicEmbeddingService,
+    EmbeddingService,
+)
 
 
 class DocumentService:
@@ -31,13 +38,18 @@ class DocumentService:
         chunking_service: (
             TextChunkingService | None
         ) = None,
+        embedding_service: (
+            EmbeddingService | None
+        ) = None,
     ) -> None:
         self.document_repository = (
-            document_repository or DocumentRepository()
+            document_repository
+            or DocumentRepository()
         )
 
         self.user_repository = (
-            user_repository or UserRepository()
+            user_repository
+            or UserRepository()
         )
 
         self.storage_service = storage_service
@@ -55,6 +67,17 @@ class DocumentService:
         self.chunking_service = (
             chunking_service
             or TextChunkingService()
+        )
+
+        self.embedding_service = (
+            embedding_service
+            or DeterministicEmbeddingService()
+        )
+
+        self.chunk_embedding_service = (
+            ChunkEmbeddingService(
+                self.embedding_service
+            )
         )
 
     def create_document(
@@ -351,10 +374,23 @@ class DocumentService:
                 document.id,
             )
 
-            self.document_chunk_repository.create_many(
+            created_chunks = (
+                self.document_chunk_repository.create_many(
+                    db,
+                    document_id=document.id,
+                    chunks=chunks,
+                )
+            )
+
+            embeddings = (
+                self.chunk_embedding_service.embed_chunks(
+                    created_chunks,
+                )
+            )
+
+            self.document_chunk_repository.update_embeddings(
                 db,
-                document_id=document.id,
-                chunks=chunks,
+                embeddings,
             )
 
             return self.document_repository.update_status(
