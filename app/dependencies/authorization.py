@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
 
@@ -22,3 +23,24 @@ def require_role(
         return current_user
 
     return role_dependency
+
+
+def require_tenant_access(
+    tenant_id: UUID,
+    current_user: User = Depends(get_current_user),
+) -> User:
+    """
+    Allow SUPER_ADMIN to access any tenant while restricting
+    TENANT_ADMIN and SUB_USER to their own tenant.
+    """
+
+    if current_user.role == UserRole.SUPER_ADMIN:
+        return current_user
+
+    if current_user.tenant_id != tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User does not have access to this tenant.",
+        )
+
+    return current_user
