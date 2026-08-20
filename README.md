@@ -1,33 +1,45 @@
-# KnowledgeHub
+KnowledgeHub
 
 KnowledgeHub is a multi-tenant AI-powered knowledge-assistance platform built with FastAPI, PostgreSQL, SQLAlchemy, Alembic, JWT authentication, role-based authorization, and tenant isolation.
 
 The project is being developed incrementally using production-oriented software engineering practices.
 
-## Current Status
+Current Status
 
-The current implementation includes the authentication, authorization, tenant-management, user-management, document-management, and document-lifecycle foundations required before the RAG subsystem is introduced.
+The current implementation includes the authentication, authorization, tenant-management, user-management, document-management, document-lifecycle, and document-filtering foundations required before the RAG subsystem is introduced.
 
-### Completed Sprints
+Completed Sprints
 
-- **KH-001 → KH-008** — Engineering foundation, PostgreSQL connectivity, PostgreSQL test infrastructure, automated testing, Docker, and GitHub Actions CI.
-- **KH-009** — Core domain model and relational data model.
-- **KH-010 → KH-018** — Repository and service-layer development for tenants, users, and documents.
-- **KH-019** — Authentication foundation.
-- **KH-020** — JWT authentication and login.
-- **KH-021** — JWT request authentication and current-user dependency.
-- **KH-022** — Role-based authorization.
-- **KH-023** — Tenant authorization and protected document APIs.
-- **KH-024** — Tenant and user management APIs.
-- **KH-025** — Document lifecycle management and tenant-safe document status transitions.
+KH-001 → KH-008 — Engineering foundation, PostgreSQL connectivity, PostgreSQL test infrastructure, automated testing, Docker, and GitHub Actions CI.
 
-> Earlier sprint ranges are summarized here where the repository history contains the corresponding implementation sequence. The Git history is the authoritative source for individual sprint commits.
+KH-009 — Core domain model and relational data model.
 
-## Architecture
+KH-010 → KH-018 — Repository and service-layer development for tenants, users, and documents.
+
+KH-019 — Authentication foundation.
+
+KH-020 — JWT authentication and login.
+
+KH-021 — JWT request authentication and current-user dependency.
+
+KH-022 — Role-based authorization.
+
+KH-023 — Tenant authorization and protected document APIs.
+
+KH-024 — Tenant and user management APIs.
+
+KH-025 — Document lifecycle management and tenant-safe document status transitions.
+
+KH-026 — Tenant user lifecycle management and role-safe user creation.
+
+KH-027 — Tenant-safe document status filtering.
+
+Earlier sprint ranges are summarized here where the repository history contains the corresponding implementation sequence. The Git history is the authoritative source for individual sprint commits.
+
+Architecture
 
 KnowledgeHub follows a layered architecture:
 
-```text
 HTTP Request
     │
     ▼
@@ -51,7 +63,8 @@ SQLAlchemy Models
     ▼
 PostgreSQL
 
-Application structure
+Application Structure
+
 app/
 ├── api/
 │   ├── auth.py
@@ -93,6 +106,7 @@ app/
 │   └── user.py
 │
 └── main.py
+
 Domain Model
 
 The current domain model contains:
@@ -109,6 +123,7 @@ Documents belong to exactly one tenant and record the user who uploaded them.
 Document chunks belong to a document.
 
 Roles
+
 SUPER_ADMIN
 
 Platform-wide administrator.
@@ -116,11 +131,17 @@ Platform-wide administrator.
 Capabilities include:
 
 Create tenants.
+
 List tenants.
+
 Access any tenant.
+
 Manage users in any tenant.
+
 Create tenant users.
+
 Create Tenant Admins and Sub Users.
+
 TENANT_ADMIN
 
 Administrator for one tenant.
@@ -128,18 +149,29 @@ Administrator for one tenant.
 Capabilities include:
 
 Access only their own tenant.
+
 Manage Sub Users in their own tenant.
+
 Create Sub Users.
+
 Upload documents.
+
 Read documents belonging to their tenant.
+
 Manage document lifecycle status for their tenant.
+
+Filter documents by lifecycle status.
 
 Tenant Admins cannot:
 
 Access another tenant.
+
 Create another Tenant Admin.
+
 Create a Super Admin.
+
 Manage users outside their tenant.
+
 SUB_USER
 
 Regular tenant user.
@@ -147,14 +179,21 @@ Regular tenant user.
 Capabilities include:
 
 Access only their own tenant.
+
 Read documents belonging to their tenant.
+
+Filter documents by lifecycle status.
 
 Sub Users cannot:
 
 Create tenants.
+
 Manage tenant users.
+
 Create privileged users.
+
 Update document lifecycle status.
+
 Authentication
 
 KnowledgeHub uses JWT bearer authentication.
@@ -177,7 +216,10 @@ Current-user dependency
 
 Authentication failures return:
 
-401 Unauthorized for missing or invalid authentication credentials.
+401 Unauthorized
+
+for missing or invalid authentication credentials.
+
 Authorization
 
 Authorization is enforced through FastAPI dependencies.
@@ -196,9 +238,12 @@ Unauthorized users receive:
 
 The authorization layer includes:
 
-role-based access checks;
-tenant ownership checks;
-tenant-admin management checks.
+Role-based access checks.
+
+Tenant ownership checks.
+
+Tenant-admin management checks.
+
 Tenant Isolation
 
 Tenant isolation is a core security boundary.
@@ -206,7 +251,9 @@ Tenant isolation is a core security boundary.
 For tenant-scoped requests:
 
 SUPER_ADMIN may access any tenant.
+
 TENANT_ADMIN may access only their own tenant.
+
 SUB_USER may access only their own tenant.
 
 Document retrieval and listing are tenant-scoped.
@@ -215,26 +262,33 @@ A document belonging to another tenant cannot be accessed through a tenant-scope
 
 Document uploads use the authenticated user's identity rather than trusting an arbitrary uploaded_by value from the request.
 
+Document status filtering also remains tenant-scoped. A user cannot bypass tenant authorization by supplying another tenant's ID together with a status filter.
+
 Current APIs
+
 Authentication
+
 POST /auth/login
 
 Authenticates a user and returns a JWT access token.
 
 Tenants
+
 POST /tenants
 GET  /tenants
 GET  /tenants/{tenant_id}
 
 Tenant creation and tenant-wide listing are restricted to Super Admins.
 
-Tenant users
+Tenant Users
+
 POST /tenants/{tenant_id}/users
 GET  /tenants/{tenant_id}/users
 
 Tenant user management is restricted according to the current role and tenant authorization rules.
 
 Documents
+
 POST  /documents/{tenant_id}
 GET   /documents/{tenant_id}
 GET   /documents/{tenant_id}/{document_id}
@@ -244,7 +298,37 @@ All document endpoints are tenant protected.
 
 Document upload identity comes from the authenticated user.
 
+Document Status Filtering
+
+The document listing endpoint supports an optional status filter:
+
+GET /documents/{tenant_id}?status=uploaded
+GET /documents/{tenant_id}?status=processing
+GET /documents/{tenant_id}?status=ready
+GET /documents/{tenant_id}?status=failed
+
+Without the status query parameter:
+
+GET /documents/{tenant_id}
+
+returns all documents belonging to the authorized tenant.
+
+Supported document statuses are:
+
+uploaded
+
+processing
+
+ready
+
+failed
+
+Invalid status values are rejected by request validation.
+
+Status filtering is implemented through the repository, service, and API layers rather than performing filtering in the API route itself.
+
 Health
+
 GET /health
 
 Returns the current application health response.
@@ -278,7 +362,9 @@ Database and Migrations
 KnowledgeHub uses:
 
 PostgreSQL
+
 SQLAlchemy ORM
+
 Alembic
 
 The current migration history starts with the initial domain model migration.
@@ -286,11 +372,17 @@ The current migration history starts with the initial domain model migration.
 Run migrations with:
 
 alembic upgrade head
+
+No database migration is required for KH-027 because document status filtering uses the existing document status column.
+
 Local Setup
-1. Clone the repository
+
+1. Clone the Repository
+
 git clone https://github.com/Aman-agnihotri-A/KnowledgeHUB.git
 cd KnowledgeHUB
-2. Create a virtual environment
+
+2. Create a Virtual Environment
 
 Linux/macOS:
 
@@ -301,16 +393,21 @@ Windows PowerShell:
 
 python -m venv .venv
 .venv\Scripts\Activate.ps1
-3. Install dependencies
+
+3. Install Dependencies
+
 python -m pip install --upgrade pip
 pip install -r requirements.txt
-4. Configure environment variables
 
-Copy the example environment file:
+4. Configure Environment Variables
+
+Copy the example environment file.
+
+Linux/macOS:
 
 cp .env.example .env
 
-On Windows PowerShell:
+Windows PowerShell:
 
 Copy-Item .env.example .env
 
@@ -327,9 +424,13 @@ docker compose up -d
 Stop the services:
 
 docker compose down
+
 Run Migrations
+
 alembic upgrade head
+
 Run the Application
+
 uvicorn app.main:app --reload
 
 The application will be available at:
@@ -339,6 +440,7 @@ http://127.0.0.1:8000
 FastAPI documentation:
 
 http://127.0.0.1:8000/docs
+
 Testing
 
 Run the complete test suite:
@@ -351,6 +453,36 @@ python -m pytest tests/<test_file>.py -q
 
 The project uses PostgreSQL-backed test infrastructure and mocks dependencies at the service/API unit-test boundary where appropriate.
 
+The test suite covers:
+
+Authentication.
+
+JWT validation.
+
+Role-based authorization.
+
+Tenant isolation.
+
+Tenant management.
+
+Tenant user management.
+
+Document management.
+
+Document lifecycle transitions.
+
+Document status filtering.
+
+Repository behavior.
+
+Service-layer business rules.
+
+API authorization behavior.
+
+Database integration behavior.
+
+Migration behavior.
+
 CI
 
 GitHub Actions runs on pushes and pull requests targeting main.
@@ -358,9 +490,13 @@ GitHub Actions runs on pushes and pull requests targeting main.
 The CI pipeline:
 
 Starts PostgreSQL 16.
+
 Installs Python 3.12.
+
 Installs project dependencies.
+
 Runs Alembic migrations.
+
 Runs the full pytest suite.
 
 Workflow:
@@ -377,11 +513,9 @@ Missing/invalid JWT
         ↓
 401 Unauthorized
 
-
 Authenticated but unauthorized
         ↓
 403 Forbidden
-
 
 Authenticated and authorized
         ↓
@@ -396,12 +530,19 @@ The current project focuses on the secure multi-tenant application foundation.
 The following are intentionally not part of the current implementation:
 
 Refresh tokens.
+
 Logout/token revocation.
+
 Document downloading.
+
 Physical document storage implementation.
+
 RAG retrieval.
+
 Embedding generation.
+
 Vector database integration.
+
 Permission tables.
 
 Those capabilities will be introduced only in later sprints when their prerequisites are complete.

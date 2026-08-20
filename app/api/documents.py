@@ -1,8 +1,19 @@
+import mimetypes
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    UploadFile,
+    status,
+)
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.db.session import get_db
 from app.dependencies.authorization import (
     require_tenant_access,
@@ -16,6 +27,7 @@ from app.schemas.document import (
     DocumentStatusUpdate,
 )
 from app.services.document import DocumentService
+from app.services.storage import StorageService
 
 
 router = APIRouter(
@@ -23,7 +35,14 @@ router = APIRouter(
     tags=["documents"],
 )
 
-document_service = DocumentService()
+
+storage_service = StorageService(
+    settings.document_storage_path,
+)
+
+document_service = DocumentService(
+    storage_service=storage_service,
+)
 
 
 @router.post(
@@ -34,7 +53,9 @@ document_service = DocumentService()
 def create_document(
     tenant_id: uuid.UUID,
     payload: DocumentCreate,
-    current_user: User = Depends(require_tenant_access),
+    current_user: User = Depends(
+        require_tenant_access,
+    ),
     db: Session = Depends(get_db),
 ) -> DocumentRead:
     try:
@@ -54,6 +75,52 @@ def create_document(
     return document
 
 
+@router.post(
+    "/{tenant_id}/upload",
+    response_model=DocumentRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_document(
+    tenant_id: uuid.UUID,
+    file: UploadFile = File(...),
+    current_user: User = Depends(
+        require_tenant_access,
+    ),
+    db: Session = Depends(get_db),
+) -> DocumentRead:
+    if not file.filename:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Filename is required.",
+        )
+
+    content = await file.read()
+
+    if not content:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded file cannot be empty.",
+        )
+
+    try:
+        document = (
+            document_service.create_document_from_upload(
+                db,
+                tenant_id=tenant_id,
+                uploaded_by=current_user.id,
+                filename=file.filename,
+                content=content,
+            )
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+    return document
+
+
 @router.get(
     "/{tenant_id}/{document_id}",
     response_model=DocumentRead,
@@ -61,7 +128,9 @@ def create_document(
 def get_document(
     tenant_id: uuid.UUID,
     document_id: uuid.UUID,
-    current_user: User = Depends(require_tenant_access),
+    current_user: User = Depends(
+        require_tenant_access,
+    ),
     db: Session = Depends(get_db),
 ) -> DocumentRead:
     document = document_service.get_document(
@@ -80,6 +149,53 @@ def get_document(
 
 
 @router.get(
+    "/{tenant_id}/{document_id}/download",
+)
+def download_document(
+    tenant_id: uuid.UUID,
+    document_id: uuid.UUID,
+    current_user: User = Depends(
+        require_tenant_access,
+    ),
+    db: Session = Depends(get_db),
+) -> FileResponse:
+    try:
+        result = document_service.get_document_file(
+            db,
+            document_id=document_id,
+            tenant_id=tenant_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found.",
+        )
+
+    document, path = result
+
+    media_type, _ = mimetypes.guess_type(
+        document.filename,
+    )
+
+    return FileResponse(
+        path=path,
+        filename=document.filename,
+        media_type=media_type or "application/octet-stream",
+    )
+
+
+@router.get(
     "/{tenant_id}",
     response_model=list[DocumentRead],
 )
@@ -89,7 +205,9 @@ def list_documents(
         default=None,
         alias="status",
     ),
-    current_user: User = Depends(require_tenant_access),
+    current_user: User = Depends(
+        require_tenant_access,
+    ),
     db: Session = Depends(get_db),
 ) -> list[DocumentRead]:
     if status_filter is None:
@@ -113,7 +231,9 @@ def update_document_status(
     tenant_id: uuid.UUID,
     document_id: uuid.UUID,
     payload: DocumentStatusUpdate,
-    current_user: User = Depends(require_tenant_admin_access),
+    current_user: User = Depends(
+        require_tenant_admin_access,
+    ),
     db: Session = Depends(get_db),
 ) -> DocumentRead:
     try:

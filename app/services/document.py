@@ -1,11 +1,14 @@
 import uuid
 
+from pathlib import Path
+
 from sqlalchemy.orm import Session
 
 from app.models.document import Document
 from app.models.enums import DocumentStatus, UserRole
 from app.repositories.document import DocumentRepository
 from app.repositories.user import UserRepository
+from app.services.storage import StorageService
 
 
 class DocumentService:
@@ -13,13 +16,17 @@ class DocumentService:
         self,
         document_repository: DocumentRepository | None = None,
         user_repository: UserRepository | None = None,
+        storage_service: StorageService | None = None,
     ) -> None:
         self.document_repository = (
             document_repository or DocumentRepository()
         )
+
         self.user_repository = (
             user_repository or UserRepository()
         )
+
+        self.storage_service = storage_service
 
     def create_document(
         self,
@@ -61,6 +68,63 @@ class DocumentService:
             storage_path=storage_path,
         )
 
+    def create_document_from_upload(
+        self,
+        db: Session,
+        *,
+        tenant_id: uuid.UUID,
+        uploaded_by: uuid.UUID,
+        filename: str,
+        content: bytes,
+    ) -> Document:
+        if self.storage_service is None:
+            raise ValueError(
+                "Document storage is not configured."
+            )
+
+        uploader = self.user_repository.get_by_id(
+            db,
+            uploaded_by,
+        )
+
+        if uploader is None:
+            raise ValueError(
+                f"User '{uploaded_by}' does not exist."
+            )
+
+        if uploader.tenant_id != tenant_id:
+            raise ValueError(
+                "User does not belong to the specified tenant."
+            )
+
+        if uploader.role not in {
+            UserRole.SUPER_ADMIN,
+            UserRole.TENANT_ADMIN,
+        }:
+            raise ValueError(
+                "User does not have permission to upload documents."
+            )
+
+        storage_path = self.storage_service.save(
+            tenant_id=str(tenant_id),
+            filename=filename,
+            content=content,
+        )
+
+        try:
+            return self.document_repository.create(
+                db,
+                tenant_id=tenant_id,
+                uploaded_by=uploaded_by,
+                filename=filename,
+                storage_path=storage_path,
+            )
+        except Exception:
+            self.storage_service.delete(
+                storage_path,
+            )
+            raise
+
     def get_document(
         self,
         db: Session,
@@ -79,6 +143,38 @@ class DocumentService:
             return None
 
         return document
+
+    def get_document_file(
+        self,
+        db: Session,
+        *,
+        document_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+    ) -> tuple[Document, Path] | None:
+        if self.storage_service is None:
+            raise ValueError(
+                "Document storage is not configured."
+            )
+
+        document = self.get_document(
+            db,
+            document_id,
+            tenant_id,
+        )
+
+        if document is None:
+            return None
+
+        path = self.storage_service.open(
+            document.storage_path,
+        )
+
+        if path is None:
+            raise FileNotFoundError(
+                "Document file not found."
+            )
+
+        return document, path
 
     def list_tenant_documents(
         self,
@@ -116,7 +212,9 @@ class DocumentService:
         )
 
         if document is None:
-            raise ValueError("Document not found.")
+            raise ValueError(
+                "Document not found."
+            )
 
         if document.tenant_id != tenant_id:
             raise ValueError(

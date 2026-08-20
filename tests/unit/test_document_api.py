@@ -1,6 +1,8 @@
 from uuid import uuid4
 from unittest.mock import ANY, MagicMock
 
+from pathlib import Path
+
 import pytest
 
 from app.dependencies.auth import get_current_user
@@ -1127,4 +1129,384 @@ def test_list_documents_invalid_status_returns_422():
         assert response.status_code == 422
 
     finally:
+        clear_authentication_override()
+
+def test_upload_document_requires_authentication():
+    tenant_id = uuid4()
+
+    response = client.post(
+        f"/documents/{tenant_id}/upload",
+        files={
+            "file": (
+                "knowledge.pdf",
+                b"pdf-content",
+                "application/pdf",
+            ),
+        },
+    )
+
+    assert response.status_code == 401
+
+
+def test_upload_document_tenant_admin_own_tenant():
+    tenant_id = uuid4()
+
+    user = authenticate_as(
+        role=UserRole.TENANT_ADMIN,
+        tenant_id=tenant_id,
+    )
+
+    document = MagicMock()
+    document.id = uuid4()
+    document.tenant_id = tenant_id
+    document.uploaded_by = user.id
+    document.filename = "knowledge.pdf"
+    document.storage_path = (
+        f"{tenant_id}/knowledge.pdf"
+    )
+    document.status = DocumentStatus.UPLOADED
+
+    original_service = (
+        document_service.create_document_from_upload
+    )
+
+    document_service.create_document_from_upload = (
+        MagicMock(
+            return_value=document,
+        )
+    )
+
+    try:
+        response = client.post(
+            f"/documents/{tenant_id}/upload",
+            files={
+                "file": (
+                    "knowledge.pdf",
+                    b"pdf-content",
+                    "application/pdf",
+                ),
+            },
+        )
+
+        assert response.status_code == 201
+
+        document_service.create_document_from_upload.assert_called_once_with(
+            ANY,
+            tenant_id=tenant_id,
+            uploaded_by=user.id,
+            filename="knowledge.pdf",
+            content=b"pdf-content",
+        )
+
+        assert (
+            response.json()["filename"]
+            == "knowledge.pdf"
+        )
+
+    finally:
+        document_service.create_document_from_upload = (
+            original_service
+        )
+        clear_authentication_override()
+
+
+def test_upload_document_tenant_admin_other_tenant():
+    user_tenant_id = uuid4()
+    requested_tenant_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.TENANT_ADMIN,
+        tenant_id=user_tenant_id,
+    )
+
+    try:
+        response = client.post(
+            f"/documents/{requested_tenant_id}/upload",
+            files={
+                "file": (
+                    "knowledge.pdf",
+                    b"pdf-content",
+                    "application/pdf",
+                ),
+            },
+        )
+
+        assert response.status_code == 403
+
+    finally:
+        clear_authentication_override()
+
+
+def test_upload_document_sub_user_reaches_service():
+    tenant_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.SUB_USER,
+        tenant_id=tenant_id,
+    )
+
+    original_service = (
+        document_service.create_document_from_upload
+    )
+
+    document_service.create_document_from_upload = (
+        MagicMock(
+            side_effect=ValueError(
+                "User does not have permission to upload documents."
+            ),
+        )
+    )
+
+    try:
+        response = client.post(
+            f"/documents/{tenant_id}/upload",
+            files={
+                "file": (
+                    "knowledge.pdf",
+                    b"pdf-content",
+                    "application/pdf",
+                ),
+            },
+        )
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == (
+            "User does not have permission to upload documents."
+        )
+
+    finally:
+        document_service.create_document_from_upload = (
+            original_service
+        )
+        clear_authentication_override()
+
+
+def test_upload_document_rejects_empty_file():
+    tenant_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.TENANT_ADMIN,
+        tenant_id=tenant_id,
+    )
+
+    try:
+        response = client.post(
+            f"/documents/{tenant_id}/upload",
+            files={
+                "file": (
+                    "empty.pdf",
+                    b"",
+                    "application/pdf",
+                ),
+            },
+        )
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == (
+            "Uploaded file cannot be empty."
+        )
+
+    finally:
+        clear_authentication_override()
+
+
+def test_download_document_requires_authentication():
+    tenant_id = uuid4()
+    document_id = uuid4()
+
+    response = client.get(
+        f"/documents/{tenant_id}/{document_id}/download",
+    )
+
+    assert response.status_code == 401
+
+
+def test_download_document_tenant_admin_own_tenant():
+    tenant_id = uuid4()
+    document_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.TENANT_ADMIN,
+        tenant_id=tenant_id,
+    )
+
+    document = MagicMock()
+    document.id = document_id
+    document.tenant_id = tenant_id
+    document.uploaded_by = uuid4()
+    document.filename = "knowledge.pdf"
+    document.storage_path = (
+        f"{tenant_id}/knowledge.pdf"
+    )
+    document.status = DocumentStatus.UPLOADED
+
+    original_service = (
+        document_service.get_document_file
+    )
+
+    document_service.get_document_file = (
+        MagicMock(
+            return_value=(
+                document,
+                Path(__file__),
+            ),
+        )
+    )
+
+    try:
+        response = client.get(
+            f"/documents/{tenant_id}/{document_id}/download",
+        )
+
+        assert response.status_code == 200
+        assert (
+            response.headers["content-disposition"]
+            == 'attachment; filename="knowledge.pdf"'
+        )
+
+    finally:
+        document_service.get_document_file = (
+            original_service
+        )
+        clear_authentication_override()
+
+
+def test_download_document_sub_user_own_tenant():
+    tenant_id = uuid4()
+    document_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.SUB_USER,
+        tenant_id=tenant_id,
+    )
+
+    document = MagicMock()
+    document.id = document_id
+    document.tenant_id = tenant_id
+    document.uploaded_by = uuid4()
+    document.filename = "knowledge.pdf"
+    document.storage_path = (
+        f"{tenant_id}/knowledge.pdf"
+    )
+    document.status = DocumentStatus.UPLOADED
+
+    original_service = (
+        document_service.get_document_file
+    )
+
+    document_service.get_document_file = (
+        MagicMock(
+            return_value=(
+                document,
+                Path(__file__),
+            ),
+        )
+    )
+
+    try:
+        response = client.get(
+            f"/documents/{tenant_id}/{document_id}/download",
+        )
+
+        assert response.status_code == 200
+
+    finally:
+        document_service.get_document_file = (
+            original_service
+        )
+        clear_authentication_override()
+
+
+def test_download_document_other_tenant_is_forbidden():
+    user_tenant_id = uuid4()
+    requested_tenant_id = uuid4()
+    document_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.TENANT_ADMIN,
+        tenant_id=user_tenant_id,
+    )
+
+    try:
+        response = client.get(
+            f"/documents/{requested_tenant_id}/{document_id}/download",
+        )
+
+        assert response.status_code == 403
+
+    finally:
+        clear_authentication_override()
+
+
+def test_download_document_not_found():
+    tenant_id = uuid4()
+    document_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.TENANT_ADMIN,
+        tenant_id=tenant_id,
+    )
+
+    original_service = (
+        document_service.get_document_file
+    )
+
+    document_service.get_document_file = (
+        MagicMock(
+            return_value=None,
+        )
+    )
+
+    try:
+        response = client.get(
+            f"/documents/{tenant_id}/{document_id}/download",
+        )
+
+        assert response.status_code == 404
+        assert response.json()["detail"] == (
+            "Document not found."
+        )
+
+    finally:
+        document_service.get_document_file = (
+            original_service
+        )
+        clear_authentication_override()
+
+
+def test_download_document_file_missing():
+    tenant_id = uuid4()
+    document_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.TENANT_ADMIN,
+        tenant_id=tenant_id,
+    )
+
+    original_service = (
+        document_service.get_document_file
+    )
+
+    document_service.get_document_file = (
+        MagicMock(
+            side_effect=FileNotFoundError(
+                "Document file not found."
+            ),
+        )
+    )
+
+    try:
+        response = client.get(
+            f"/documents/{tenant_id}/{document_id}/download",
+        )
+
+        assert response.status_code == 404
+        assert response.json()["detail"] == (
+            "Document file not found."
+        )
+
+    finally:
+        document_service.get_document_file = (
+            original_service
+        )
         clear_authentication_override()

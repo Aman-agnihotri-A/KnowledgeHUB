@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from unittest.mock import MagicMock
 from uuid import uuid4
 
@@ -745,3 +747,323 @@ def test_list_tenant_documents_by_status():
         tenant_id,
         DocumentStatus.PROCESSING,
     )
+
+def test_create_document_from_upload():
+    db = MagicMock()
+    document_repository = MagicMock()
+    user_repository = MagicMock()
+    storage_service = MagicMock()
+
+    service = DocumentService(
+        document_repository=document_repository,
+        user_repository=user_repository,
+        storage_service=storage_service,
+    )
+
+    tenant_id = uuid4()
+    user_id = uuid4()
+
+    uploader = User(
+        email="admin@example.com",
+        hashed_password="hashed-password",
+        full_name="Tenant Admin",
+        role=UserRole.TENANT_ADMIN,
+        tenant_id=tenant_id,
+    )
+
+    document = Document(
+        tenant_id=tenant_id,
+        uploaded_by=user_id,
+        filename="knowledge.pdf",
+        storage_path=(
+            f"{tenant_id}/knowledge.pdf"
+        ),
+    )
+
+    user_repository.get_by_id.return_value = uploader
+
+    storage_service.save.return_value = (
+        f"{tenant_id}/knowledge.pdf"
+    )
+
+    document_repository.create.return_value = document
+
+    result = service.create_document_from_upload(
+        db,
+        tenant_id=tenant_id,
+        uploaded_by=user_id,
+        filename="knowledge.pdf",
+        content=b"pdf-content",
+    )
+
+    assert result is document
+
+    storage_service.save.assert_called_once_with(
+        tenant_id=str(tenant_id),
+        filename="knowledge.pdf",
+        content=b"pdf-content",
+    )
+
+    document_repository.create.assert_called_once_with(
+        db,
+        tenant_id=tenant_id,
+        uploaded_by=user_id,
+        filename="knowledge.pdf",
+        storage_path=(
+            f"{tenant_id}/knowledge.pdf"
+        ),
+    )
+
+
+def test_create_document_from_upload_rejects_cross_tenant_user():
+    db = MagicMock()
+    document_repository = MagicMock()
+    user_repository = MagicMock()
+    storage_service = MagicMock()
+
+    service = DocumentService(
+        document_repository=document_repository,
+        user_repository=user_repository,
+        storage_service=storage_service,
+    )
+
+    tenant_id = uuid4()
+    other_tenant_id = uuid4()
+    user_id = uuid4()
+
+    uploader = User(
+        email="admin@example.com",
+        hashed_password="hashed-password",
+        full_name="Other Tenant Admin",
+        role=UserRole.TENANT_ADMIN,
+        tenant_id=other_tenant_id,
+    )
+
+    user_repository.get_by_id.return_value = uploader
+
+    with pytest.raises(
+        ValueError,
+        match="User does not belong to the specified tenant.",
+    ):
+        service.create_document_from_upload(
+            db,
+            tenant_id=tenant_id,
+            uploaded_by=user_id,
+            filename="knowledge.pdf",
+            content=b"pdf-content",
+        )
+
+    storage_service.save.assert_not_called()
+    document_repository.create.assert_not_called()
+
+
+def test_create_document_from_upload_rejects_sub_user():
+    db = MagicMock()
+    document_repository = MagicMock()
+    user_repository = MagicMock()
+    storage_service = MagicMock()
+
+    service = DocumentService(
+        document_repository=document_repository,
+        user_repository=user_repository,
+        storage_service=storage_service,
+    )
+
+    tenant_id = uuid4()
+    user_id = uuid4()
+
+    uploader = User(
+        email="user@example.com",
+        hashed_password="hashed-password",
+        full_name="Sub User",
+        role=UserRole.SUB_USER,
+        tenant_id=tenant_id,
+    )
+
+    user_repository.get_by_id.return_value = uploader
+
+    with pytest.raises(
+        ValueError,
+        match="User does not have permission to upload documents.",
+    ):
+        service.create_document_from_upload(
+            db,
+            tenant_id=tenant_id,
+            uploaded_by=user_id,
+            filename="knowledge.pdf",
+            content=b"pdf-content",
+        )
+
+    storage_service.save.assert_not_called()
+    document_repository.create.assert_not_called()
+
+
+def test_create_document_from_upload_cleans_storage_when_database_create_fails():
+    db = MagicMock()
+    document_repository = MagicMock()
+    user_repository = MagicMock()
+    storage_service = MagicMock()
+
+    service = DocumentService(
+        document_repository=document_repository,
+        user_repository=user_repository,
+        storage_service=storage_service,
+    )
+
+    tenant_id = uuid4()
+    user_id = uuid4()
+
+    uploader = User(
+        email="admin@example.com",
+        hashed_password="hashed-password",
+        full_name="Tenant Admin",
+        role=UserRole.TENANT_ADMIN,
+        tenant_id=tenant_id,
+    )
+
+    storage_path = (
+        f"{tenant_id}/knowledge.pdf"
+    )
+
+    user_repository.get_by_id.return_value = uploader
+
+    storage_service.save.return_value = (
+        storage_path
+    )
+
+    document_repository.create.side_effect = (
+        RuntimeError("database failure")
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="database failure",
+    ):
+        service.create_document_from_upload(
+            db,
+            tenant_id=tenant_id,
+            uploaded_by=user_id,
+            filename="knowledge.pdf",
+            content=b"pdf-content",
+        )
+
+    storage_service.delete.assert_called_once_with(
+        storage_path,
+    )
+
+
+def test_get_document_file_returns_document_and_path():
+    db = MagicMock()
+    document_repository = MagicMock()
+    user_repository = MagicMock()
+    storage_service = MagicMock()
+
+    service = DocumentService(
+        document_repository=document_repository,
+        user_repository=user_repository,
+        storage_service=storage_service,
+    )
+
+    tenant_id = uuid4()
+
+    document = Document(
+        tenant_id=tenant_id,
+        uploaded_by=uuid4(),
+        filename="knowledge.pdf",
+        storage_path=(
+            f"{tenant_id}/knowledge.pdf"
+        ),
+    )
+
+    expected_path = Path(
+        "/tmp/knowledge.pdf"
+    )
+
+    document_repository.get_by_id.return_value = document
+    storage_service.open.return_value = (
+        expected_path
+    )
+
+    result = service.get_document_file(
+        db,
+        document_id=document.id,
+        tenant_id=tenant_id,
+    )
+
+    assert result == (
+        document,
+        expected_path,
+    )
+
+    storage_service.open.assert_called_once_with(
+        document.storage_path,
+    )
+
+
+def test_get_document_file_hides_cross_tenant_document():
+    db = MagicMock()
+    document_repository = MagicMock()
+    user_repository = MagicMock()
+    storage_service = MagicMock()
+
+    service = DocumentService(
+        document_repository=document_repository,
+        user_repository=user_repository,
+        storage_service=storage_service,
+    )
+
+    document = Document(
+        tenant_id=uuid4(),
+        uploaded_by=uuid4(),
+        filename="secret.pdf",
+        storage_path="secret/secret.pdf",
+    )
+
+    document_repository.get_by_id.return_value = document
+
+    result = service.get_document_file(
+        db,
+        document_id=document.id,
+        tenant_id=uuid4(),
+    )
+
+    assert result is None
+
+    storage_service.open.assert_not_called()
+
+
+def test_get_document_file_raises_when_file_missing():
+    db = MagicMock()
+    document_repository = MagicMock()
+    user_repository = MagicMock()
+    storage_service = MagicMock()
+
+    service = DocumentService(
+        document_repository=document_repository,
+        user_repository=user_repository,
+        storage_service=storage_service,
+    )
+
+    tenant_id = uuid4()
+
+    document = Document(
+        tenant_id=tenant_id,
+        uploaded_by=uuid4(),
+        filename="missing.pdf",
+        storage_path=(
+            f"{tenant_id}/missing.pdf"
+        ),
+    )
+
+    document_repository.get_by_id.return_value = document
+    storage_service.open.return_value = None
+
+    with pytest.raises(
+        FileNotFoundError,
+        match="Document file not found.",
+    ):
+        service.get_document_file(
+            db,
+            document_id=document.id,
+            tenant_id=tenant_id,
+        )
