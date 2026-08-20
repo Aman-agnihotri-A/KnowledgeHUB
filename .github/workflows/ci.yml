@@ -34,6 +34,7 @@ jobs:
 
     env:
       DATABASE_URL: postgresql+psycopg://knowledgehub:knowledgehub@localhost:5432/knowledgehub
+      JWT_SECRET_KEY: ci-test-secret-key
 
     steps:
       - name: Checkout repository
