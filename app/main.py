@@ -10,6 +10,8 @@ from app.api.documents import (
 from app.api.tenants import router as tenant_router
 from app.core.config import settings
 
+from app.api.rag import router as rag_router
+
 
 def create_app() -> FastAPI:
     app = FastAPI(
@@ -21,6 +23,7 @@ def create_app() -> FastAPI:
     app.include_router(tenant_router)
     app.include_router(document_router)
     app.include_router(conversation_router)
+    app.include_router(rag_router)
 
     @app.get(
         "/health",

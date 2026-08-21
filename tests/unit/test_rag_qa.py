@@ -3,6 +3,7 @@ from uuid import uuid4
 
 import pytest
 
+from app.core.config import settings
 from app.models.document import Document
 from app.models.document_chunk import DocumentChunk
 from app.models.enums import DocumentStatus, MessageRole
@@ -695,7 +696,15 @@ def test_invalid_conversation_history_limit_is_rejected():
             conversation_history_limit=0,
         )
 
-def test_default_answer_provider_is_deterministic():
+def test_default_answer_provider_is_deterministic(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        settings,
+        "answer_generation_provider",
+        "deterministic",
+    )
+
     service = RAGQuestionAnsweringService(
         retrieval_service=MagicMock(),
     )
