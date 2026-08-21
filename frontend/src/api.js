@@ -229,3 +229,96 @@ export async function askQuestion(
     },
   );
 }
+export async function listDocuments(
+  tenantId,
+) {
+  return request(
+    `/documents/${tenantId}`,
+  );
+}
+
+async function uploadRequest(
+  path,
+  file,
+) {
+  const session =
+    getStoredSession();
+
+  const headers = new Headers();
+
+  if (session?.accessToken) {
+    headers.set(
+      "Authorization",
+      `Bearer ${session.accessToken}`,
+    );
+  }
+
+  const formData = new FormData();
+
+  formData.append(
+    "file",
+    file,
+  );
+
+  const response = await fetch(
+    `${API_BASE_URL}${path}`,
+    {
+      method: "POST",
+      headers,
+      body: formData,
+    },
+  );
+
+  if (response.status === 401) {
+    clearSession();
+
+    throw new Error(
+      "Your session has expired. Please log in again.",
+    );
+  }
+
+  if (!response.ok) {
+    let message =
+      "Document upload failed.";
+
+    try {
+      const body =
+        await response.json();
+
+      if (
+        typeof body.detail ===
+        "string"
+      ) {
+        message = body.detail;
+      }
+    } catch {
+      // Keep default error.
+    }
+
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
+export async function uploadDocument(
+  tenantId,
+  file,
+) {
+  return uploadRequest(
+    `/documents/${tenantId}/upload`,
+    file,
+  );
+}
+
+export async function processDocument(
+  tenantId,
+  documentId,
+) {
+  return request(
+    `/documents/${tenantId}/${documentId}/process`,
+    {
+      method: "POST",
+    },
+  );
+}

@@ -10,7 +10,10 @@ import {
   getConversation,
   getSession,
   listConversations,
+  listDocuments,
   login,
+  processDocument,
+  uploadDocument,
 } from "./api";
 
 function LoginPage({
@@ -273,6 +276,283 @@ function MessageBubble({
           </div>
         )}
     </article>
+  );
+}
+
+function DocumentManager({
+  session,
+}) {
+  const [documents, setDocuments] =
+    useState([]);
+
+  const [selectedFile, setSelectedFile] =
+    useState(null);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [uploading, setUploading] =
+    useState(false);
+
+  const [processingId, setProcessingId] =
+    useState(null);
+
+  const [error, setError] =
+    useState("");
+
+  async function loadDocuments() {
+    setLoading(true);
+    setError("");
+
+    try {
+      const result =
+        await listDocuments(
+          session.tenantId,
+        );
+
+      setDocuments(result);
+    } catch (err) {
+      setError(
+        err.message ||
+          "Unable to load documents.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadDocuments();
+  }, [session.tenantId]);
+
+  async function handleUpload(
+    event,
+  ) {
+    event.preventDefault();
+
+    if (!selectedFile || uploading) {
+      return;
+    }
+
+    if (
+      selectedFile.type !==
+        "application/pdf" &&
+      !selectedFile.name
+        .toLowerCase()
+        .endsWith(".pdf")
+    ) {
+      setError(
+        "Only PDF documents are supported.",
+      );
+
+      return;
+    }
+
+    setUploading(true);
+    setError("");
+
+    try {
+      const document =
+        await uploadDocument(
+          session.tenantId,
+          selectedFile,
+        );
+
+      setDocuments(
+        (current) => [
+          document,
+          ...current,
+        ],
+      );
+
+      setSelectedFile(null);
+
+      const fileInput =
+        document.querySelector(
+          "#document-upload-input",
+        );
+
+      if (fileInput) {
+        fileInput.value = "";
+      }
+
+      await handleProcess(
+        document,
+      );
+    } catch (err) {
+      setError(
+        err.message ||
+          "Unable to upload document.",
+      );
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function handleProcess(
+    document,
+  ) {
+    setProcessingId(
+      document.id,
+    );
+
+    setError("");
+
+    try {
+      const processed =
+        await processDocument(
+          session.tenantId,
+          document.id,
+        );
+
+      setDocuments(
+        (current) =>
+          current.map((item) =>
+            item.id === processed.id
+              ? processed
+              : item,
+          ),
+      );
+    } catch (err) {
+      setError(
+        err.message ||
+          "Unable to process document.",
+      );
+
+      await loadDocuments();
+    } finally {
+      setProcessingId(null);
+    }
+  }
+
+  return (
+    <section className="documents-panel">
+      <div className="documents-header">
+        <div>
+          <h2>Documents</h2>
+
+          <p className="muted">
+            Documents available to
+            your tenant.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          className="secondary-button"
+          onClick={loadDocuments}
+          disabled={loading}
+        >
+          Refresh
+        </button>
+      </div>
+
+      {session.role ===
+        "tenant_admin" && (
+        <form
+          className="upload-form"
+          onSubmit={handleUpload}
+        >
+          <label
+            className="upload-label"
+            htmlFor="document-upload-input"
+          >
+            Upload PDF
+          </label>
+
+          <div className="upload-controls">
+            <input
+              id="document-upload-input"
+              type="file"
+              accept=".pdf,application/pdf"
+              onChange={(event) =>
+                setSelectedFile(
+                  event.target.files?.[0] ||
+                    null,
+                )
+              }
+              disabled={uploading}
+            />
+
+            <button
+              type="submit"
+              className="primary-button"
+              disabled={
+                uploading ||
+                !selectedFile
+              }
+            >
+              {uploading
+                ? "Uploading..."
+                : "Upload"}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {error && (
+        <div className="error-banner">
+          {error}
+        </div>
+      )}
+
+      <div className="document-list">
+        {loading ? (
+          <p className="document-empty">
+            Loading documents...
+          </p>
+        ) : documents.length === 0 ? (
+          <p className="document-empty">
+            No documents have been
+            uploaded yet.
+          </p>
+        ) : (
+          documents.map(
+            (document) => (
+              <article
+                key={document.id}
+                className="document-card"
+              >
+                <div className="document-info">
+                  <strong>
+                    {document.filename}
+                  </strong>
+
+                  <span>
+                    Status:{" "}
+                    {document.status}
+                  </span>
+                </div>
+
+                {session.role ===
+                  "tenant_admin" &&
+                  document.status !==
+                    "ready" && (
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() =>
+                        handleProcess(
+                          document,
+                        )
+                      }
+                      disabled={
+                        processingId ===
+                        document.id
+                      }
+                    >
+                      {processingId ===
+                      document.id
+                        ? "Processing..."
+                        : "Process"}
+                    </button>
+                  )}
+              </article>
+            ),
+          )
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -581,6 +861,9 @@ function ChatPage({
             {session.role}
           </span>
         </header>
+        <DocumentManager
+            session={session}
+        />
 
         {error && (
           <div className="error-banner page-error">

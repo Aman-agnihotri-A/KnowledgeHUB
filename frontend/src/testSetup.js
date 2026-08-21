@@ -7,11 +7,16 @@ import {
   vi,
 } from "vitest";
 
+
+
 import {
-  askQuestion,
-  clearSession,
-  getSession,
-  login,
+    listDocuments,
+    processDocument,
+    uploadDocument,
+    askQuestion,
+    clearSession,
+    getSession,
+    login,
 } from "./api";
 
 describe("frontend API client", () => {
@@ -19,6 +24,239 @@ describe("frontend API client", () => {
     sessionStorage.clear();
     vi.restoreAllMocks();
   });
+
+  it("lists tenant documents", async () => {
+  const token =
+    createTestJwt({
+      sub: "admin-1",
+      role: "tenant_admin",
+      tenant_id: "tenant-1",
+    });
+
+  sessionStorage.setItem(
+    "knowledgehub_session",
+    JSON.stringify({
+      accessToken: token,
+      tokenType: "bearer",
+      userId: "admin-1",
+      role: "tenant_admin",
+      tenantId: "tenant-1",
+    }),
+  );
+
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValue(
+      new Response(
+        JSON.stringify([
+          {
+            id: "document-1",
+            tenant_id: "tenant-1",
+            filename:
+              "KnowledgeHub_Demo_Product_Guide.pdf",
+            status: "ready",
+          },
+        ]),
+        {
+          status: 200,
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+        },
+      ),
+    );
+
+  vi.stubGlobal(
+    "fetch",
+    fetchMock,
+  );
+
+  const result =
+    await listDocuments(
+      "tenant-1",
+    );
+
+  expect(result).toHaveLength(1);
+
+  expect(
+    fetchMock,
+  ).toHaveBeenCalledWith(
+    "/documents/tenant-1",
+    expect.objectContaining({
+      headers:
+        expect.any(Headers),
+    }),
+  );
+});
+
+it("uploads a document as multipart form data", async () => {
+  const token =
+    createTestJwt({
+      sub: "admin-1",
+      role: "tenant_admin",
+      tenant_id: "tenant-1",
+    });
+
+  sessionStorage.setItem(
+    "knowledgehub_session",
+    JSON.stringify({
+      accessToken: token,
+      tokenType: "bearer",
+      userId: "admin-1",
+      role: "tenant_admin",
+      tenantId: "tenant-1",
+    }),
+  );
+
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: "document-1",
+          tenant_id: "tenant-1",
+          filename:
+            "KnowledgeHub_Demo_Product_Guide.pdf",
+          status: "uploaded",
+        }),
+        {
+          status: 201,
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+        },
+      ),
+    );
+
+  vi.stubGlobal(
+    "fetch",
+    fetchMock,
+  );
+
+  const file = new File(
+    ["pdf-content"],
+    "KnowledgeHub_Demo_Product_Guide.pdf",
+    {
+      type: "application/pdf",
+    },
+  );
+
+  const result =
+    await uploadDocument(
+      "tenant-1",
+      file,
+    );
+
+  expect(
+    result.filename,
+  ).toBe(
+    "KnowledgeHub_Demo_Product_Guide.pdf",
+  );
+
+  const [
+    url,
+    options,
+  ] = fetchMock.mock.calls[0];
+
+  expect(url).toBe(
+    "/documents/tenant-1/upload",
+  );
+
+  expect(options.method).toBe(
+    "POST",
+  );
+
+  expect(
+    options.headers.get(
+      "Authorization",
+    ),
+  ).toBe(
+    `Bearer ${token}`,
+  );
+
+  expect(
+    options.headers.has(
+      "Content-Type",
+    ),
+  ).toBe(false);
+
+  expect(
+    options.body,
+  ).toBeInstanceOf(FormData);
+
+  expect(
+    options.body.get("file").name,
+  ).toBe(
+    "KnowledgeHub_Demo_Product_Guide.pdf",
+  );
+});
+
+it("processes a tenant document", async () => {
+  const token =
+    createTestJwt({
+      sub: "admin-1",
+      role: "tenant_admin",
+      tenant_id: "tenant-1",
+    });
+
+  sessionStorage.setItem(
+    "knowledgehub_session",
+    JSON.stringify({
+      accessToken: token,
+      tokenType: "bearer",
+      userId: "admin-1",
+      role: "tenant_admin",
+      tenantId: "tenant-1",
+    }),
+  );
+
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: "document-1",
+          tenant_id: "tenant-1",
+          filename:
+            "KnowledgeHub_Demo_Product_Guide.pdf",
+          status: "ready",
+        }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+        },
+      ),
+    );
+
+  vi.stubGlobal(
+    "fetch",
+    fetchMock,
+  );
+
+  const result =
+    await processDocument(
+      "tenant-1",
+      "document-1",
+    );
+
+  expect(
+    result.status,
+  ).toBe("ready");
+
+  expect(
+    fetchMock,
+  ).toHaveBeenCalledWith(
+    "/documents/tenant-1/document-1/process",
+    expect.objectContaining({
+      method: "POST",
+    }),
+  );
+});
 
   afterEach(() => {
     sessionStorage.clear();
