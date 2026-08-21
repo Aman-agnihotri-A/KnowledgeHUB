@@ -9,6 +9,7 @@ from app.models.enums import DocumentStatus, MessageRole
 from app.models.conversation import Conversation
 from app.rag.answer_generation import (
     AnswerGenerationResponse,
+    DeterministicAnswerGenerationProvider
 )
 from app.rag.qa import (
     RAGQuestionAnsweringService,
@@ -693,3 +694,13 @@ def test_invalid_conversation_history_limit_is_rejected():
         RAGQuestionAnsweringService(
             conversation_history_limit=0,
         )
+
+def test_default_answer_provider_is_deterministic():
+    service = RAGQuestionAnsweringService(
+        retrieval_service=MagicMock(),
+    )
+
+    assert isinstance(
+        service.answer_provider,
+        DeterministicAnswerGenerationProvider,
+    )

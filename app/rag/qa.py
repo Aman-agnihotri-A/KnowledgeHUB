@@ -6,11 +6,12 @@ from sqlalchemy.orm import Session
 from app.models.conversation import (
     ConversationMessage,
 )
+from app.core.config import settings
 from app.rag.answer_generation import (
     AnswerGenerationProvider,
     AnswerGenerationRequest,
     ConversationHistoryMessage,
-    DeterministicAnswerGenerationProvider,
+    create_answer_generation_provider,
 )
 from app.services.conversation import ConversationService
 from app.services.retrieval import (
@@ -88,7 +89,14 @@ class RAGQuestionAnsweringService:
 
         self.answer_provider = (
             answer_provider
-            or DeterministicAnswerGenerationProvider()
+            or create_answer_generation_provider(
+                provider_name=(
+                    settings.answer_generation_provider
+                ),
+                openai_api_key=settings.openai_api_key,
+                openai_model=settings.openai_model,
+            )
+
         )
 
         self.conversation_service = (
