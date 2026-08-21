@@ -7,12 +7,15 @@ import {
   askQuestion,
   clearSession,
   createConversation,
+  createTenantUser,
   getConversation,
   getSession,
   listConversations,
   listDocuments,
+  listTenantUsers,
   login,
   processDocument,
+  updateTenantUserStatus,
   uploadDocument,
 } from "./api";
 
@@ -352,33 +355,33 @@ function DocumentManager({
     setError("");
 
     try {
-      const document =
+      const uploadedDocument =
         await uploadDocument(
-          session.tenantId,
-          selectedFile,
+            session.tenantId,
+            selectedFile,
         );
 
       setDocuments(
         (current) => [
-          document,
-          ...current,
+            uploadedDocument,
+            ...current,
         ],
-      );
-
-      setSelectedFile(null);
-
-      const fileInput =
-        document.querySelector(
-          "#document-upload-input",
         );
 
-      if (fileInput) {
-        fileInput.value = "";
-      }
+        setSelectedFile(null);
 
-      await handleProcess(
-        document,
-      );
+        const fileInput =
+        window.document.querySelector(
+            "#document-upload-input",
+        );
+
+        if (fileInput) {
+        fileInput.value = "";
+        }
+
+        await handleProcess(
+        uploadedDocument,
+        );
     } catch (err) {
       setError(
         err.message ||
@@ -550,6 +553,320 @@ function DocumentManager({
               </article>
             ),
           )
+        )}
+      </div>
+    </section>
+  );
+}
+
+function UserManager({
+  session,
+}) {
+  const [users, setUsers] =
+    useState([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [submitting, setSubmitting] =
+    useState(false);
+
+  const [updatingId, setUpdatingId] =
+    useState(null);
+
+  const [error, setError] =
+    useState("");
+
+  const [form, setForm] =
+    useState({
+      full_name: "",
+      email: "",
+      password: "",
+    });
+
+  async function loadUsers() {
+    setLoading(true);
+    setError("");
+
+    try {
+      const result =
+        await listTenantUsers(
+          session.tenantId,
+        );
+
+      setUsers(result);
+    } catch (err) {
+      setError(
+        err.message ||
+          "Unable to load users.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadUsers();
+  }, [session.tenantId]);
+
+  function handleChange(event) {
+    const {
+      name,
+      value,
+    } = event.target;
+
+    setForm(
+      (current) => ({
+        ...current,
+        [name]: value,
+      }),
+    );
+  }
+
+  async function handleCreate(
+    event,
+  ) {
+    event.preventDefault();
+
+    if (submitting) {
+      return;
+    }
+
+    setSubmitting(true);
+    setError("");
+
+    try {
+      const user =
+        await createTenantUser(
+          session.tenantId,
+          {
+            full_name:
+              form.full_name.trim(),
+            email:
+              form.email.trim(),
+            password:
+              form.password,
+            role: "sub_user",
+          },
+        );
+
+      setUsers(
+        (current) => [
+          user,
+          ...current,
+        ],
+      );
+
+      setForm({
+        full_name: "",
+        email: "",
+        password: "",
+      });
+    } catch (err) {
+      setError(
+        err.message ||
+          "Unable to create user.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleStatusChange(
+    user,
+  ) {
+    if (updatingId) {
+      return;
+    }
+
+    setUpdatingId(user.id);
+    setError("");
+
+    try {
+      const updated =
+        await updateTenantUserStatus(
+          session.tenantId,
+          user.id,
+          !user.is_active,
+        );
+
+      setUsers(
+        (current) =>
+          current.map((item) =>
+            item.id === updated.id
+              ? updated
+              : item,
+          ),
+      );
+    } catch (err) {
+      setError(
+        err.message ||
+          "Unable to update user.",
+      );
+    } finally {
+      setUpdatingId(null);
+    }
+  }
+
+  return (
+    <section className="users-panel">
+      <div className="users-header">
+        <div>
+          <h2>
+            Tenant Users
+          </h2>
+
+          <p className="muted">
+            Manage Sub Users in
+            your tenant.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          className="secondary-button"
+          onClick={loadUsers}
+          disabled={loading}
+        >
+          Refresh
+        </button>
+      </div>
+
+      <form
+        className="user-create-form"
+        onSubmit={handleCreate}
+      >
+        <div className="user-form-grid">
+          <label>
+            Full name
+
+            <input
+              name="full_name"
+              type="text"
+              value={
+                form.full_name
+              }
+              onChange={
+                handleChange
+              }
+              required
+            />
+          </label>
+
+          <label>
+            Email
+
+            <input
+              name="email"
+              type="email"
+              value={form.email}
+              onChange={
+                handleChange
+              }
+              required
+            />
+          </label>
+
+          <label>
+            Temporary password
+
+            <input
+              name="password"
+              type="password"
+              value={
+                form.password
+              }
+              onChange={
+                handleChange
+              }
+              required
+              minLength={8}
+            />
+          </label>
+        </div>
+
+        <button
+          type="submit"
+          className="primary-button"
+          disabled={submitting}
+        >
+          {submitting
+            ? "Creating..."
+            : "Create Sub User"}
+        </button>
+      </form>
+
+      {error && (
+        <div className="error-banner">
+          {error}
+        </div>
+      )}
+
+      <div className="user-list">
+        {loading ? (
+          <p className="document-empty">
+            Loading users...
+          </p>
+        ) : users.length === 0 ? (
+          <p className="document-empty">
+            No Sub Users yet.
+          </p>
+        ) : (
+          users.map((user) => (
+            <article
+              key={user.id}
+              className="user-card"
+            >
+              <div className="user-info">
+                <strong>
+                  {user.full_name}
+                </strong>
+
+                <span>
+                  {user.email}
+                </span>
+
+                <span>
+                  {user.role}
+                </span>
+              </div>
+
+              <div className="user-actions">
+                <span
+                  className={
+                    user.is_active
+                      ? "status-active"
+                      : "status-inactive"
+                  }
+                >
+                  {user.is_active
+                    ? "ACTIVE"
+                    : "INACTIVE"}
+                </span>
+
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() =>
+                    handleStatusChange(
+                      user,
+                    )
+                  }
+                  disabled={
+                    updatingId ===
+                    user.id
+                  }
+                >
+                  {updatingId ===
+                  user.id
+                    ? "Updating..."
+                    : user.is_active
+                      ? "Deactivate"
+                      : "Activate"}
+                </button>
+              </div>
+            </article>
+          ))
         )}
       </div>
     </section>
@@ -864,6 +1181,13 @@ function ChatPage({
         <DocumentManager
             session={session}
         />
+
+        {session.role ===
+        "tenant_admin" && (
+        <UserManager
+            session={session}
+        />
+        )}
 
         {error && (
           <div className="error-banner page-error">

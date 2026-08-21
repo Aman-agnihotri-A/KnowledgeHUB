@@ -532,3 +532,139 @@ button:disabled {
     flex-direction: column;
   }
 }
+.users-panel {
+  width: min(920px, 100%);
+  margin: 0 auto;
+  padding: 18px 24px;
+  border-bottom: 1px solid #e3e7ef;
+}
+
+.users-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.users-header h2 {
+  margin: 0 0 4px;
+  font-size: 17px;
+}
+
+.users-header p {
+  margin: 0;
+  font-size: 13px;
+}
+
+.user-create-form {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 18px;
+  padding: 16px;
+  border: 1px solid #e1e6ef;
+  border-radius: 10px;
+  background: #fafbfc;
+}
+
+.user-form-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.user-form-grid label {
+  display: grid;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.user-form-grid input {
+  width: 100%;
+  padding: 10px 11px;
+  border: 1px solid #d6dce7;
+  border-radius: 9px;
+  background: #ffffff;
+  outline: none;
+}
+
+.user-form-grid input:focus {
+  border-color: #536dfe;
+  box-shadow:
+    0 0 0 3px #536dfe1f;
+}
+
+.user-list {
+  display: grid;
+  gap: 8px;
+}
+
+.user-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid #e1e6ef;
+  border-radius: 10px;
+  background: #fafbfc;
+}
+
+.user-info {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.user-info strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-info span {
+  color: #7b8495;
+  font-size: 12px;
+}
+
+.user-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.status-active,
+.status-inactive {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.status-active {
+  color: #287a4d;
+}
+
+.status-inactive {
+  color: #a13c3c;
+}
+
+@media (max-width: 760px) {
+  .users-panel {
+    padding: 14px 16px;
+  }
+
+  .user-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .user-card {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .user-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+}

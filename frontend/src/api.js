@@ -322,3 +322,40 @@ export async function processDocument(
     },
   );
 }
+
+export async function listTenantUsers(
+  tenantId,
+) {
+  return request(
+    `/tenants/${tenantId}/users`,
+  );
+}
+
+export async function createTenantUser(
+  tenantId,
+  user,
+) {
+  return request(
+    `/tenants/${tenantId}/users`,
+    {
+      method: "POST",
+      body: JSON.stringify(user),
+    },
+  );
+}
+
+export async function updateTenantUserStatus(
+  tenantId,
+  userId,
+  isActive,
+) {
+  return request(
+    `/tenants/${tenantId}/users/${userId}/status`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        is_active: isActive,
+      }),
+    },
+  );
+}
