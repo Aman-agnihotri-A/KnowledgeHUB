@@ -369,3 +369,95 @@ def test_append_message_rejects_inaccessible_conversation():
             user_id=uuid4(),
             content="Question",
         )
+
+def test_list_recent_messages_enforces_conversation_access():
+    db = MagicMock()
+
+    tenant_id = uuid4()
+    user_id = uuid4()
+    conversation_id = uuid4()
+
+    conversation_repository = MagicMock()
+    message_repository = MagicMock()
+
+    conversation_repository.get_by_id.return_value = (
+        Conversation(
+            id=conversation_id,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            title="History",
+        )
+    )
+
+    messages = [
+        ConversationMessage(
+            conversation_id=conversation_id,
+            message_index=0,
+            role=MessageRole.USER,
+            content="First",
+        ),
+        ConversationMessage(
+            conversation_id=conversation_id,
+            message_index=1,
+            role=MessageRole.ASSISTANT,
+            content="Second",
+        ),
+    ]
+
+    message_repository.list_recent_by_conversation.return_value = (
+        messages
+    )
+
+    service = ConversationService(
+        conversation_repository=conversation_repository,
+        message_repository=message_repository,
+        user_repository=MagicMock(),
+    )
+
+    result = service.list_recent_messages(
+        db,
+        conversation_id=conversation_id,
+        tenant_id=tenant_id,
+        user_id=user_id,
+        limit=10,
+    )
+
+    assert result == messages
+
+    message_repository.list_recent_by_conversation.assert_called_once_with(
+        db,
+        conversation_id,
+        limit=10,
+    )
+
+def test_list_recent_messages_rejects_inaccessible_conversation():
+    db = MagicMock()
+
+    conversation_repository = MagicMock()
+
+    conversation_repository.get_by_id.return_value = (
+        Conversation(
+            id=uuid4(),
+            tenant_id=uuid4(),
+            user_id=uuid4(),
+            title="Private",
+        )
+    )
+
+    service = ConversationService(
+        conversation_repository=conversation_repository,
+        message_repository=MagicMock(),
+        user_repository=MagicMock(),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Conversation not found",
+    ):
+        service.list_recent_messages(
+            db,
+            conversation_id=uuid4(),
+            tenant_id=uuid4(),
+            user_id=uuid4(),
+            limit=10,
+        )

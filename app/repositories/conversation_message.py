@@ -70,3 +70,35 @@ class ConversationMessageRepository:
         )
 
         return list(db.scalars(statement).all())
+
+    def list_recent_by_conversation(
+        self,
+        db: Session,
+        conversation_id: uuid.UUID,
+        *,
+        limit: int,
+    ) -> list[ConversationMessage]:
+        if limit < 1:
+            raise ValueError(
+                "limit must be greater than zero."
+            )
+
+        statement = (
+            select(ConversationMessage)
+            .where(
+                ConversationMessage.conversation_id
+                == conversation_id,
+            )
+            .order_by(
+                ConversationMessage.message_index.desc(),
+            )
+            .limit(limit)
+        )
+
+        messages = list(
+            db.scalars(statement).all()
+        )
+
+        messages.reverse()
+
+        return messages

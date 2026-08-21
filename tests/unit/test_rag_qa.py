@@ -5,7 +5,7 @@ import pytest
 
 from app.models.document import Document
 from app.models.document_chunk import DocumentChunk
-from app.models.enums import DocumentStatus
+from app.models.enums import DocumentStatus, MessageRole
 from app.models.conversation import Conversation
 from app.rag.answer_generation import (
     AnswerGenerationResponse,
@@ -537,3 +537,159 @@ def test_ask_persists_grounded_answer_and_sources():
             }
         ],
     )
+
+def test_ask_passes_previous_conversation_history_to_generator():
+    db = MagicMock()
+
+    tenant_id = uuid4()
+    user_id = uuid4()
+    conversation_id = uuid4()
+
+    retrieval_service = MagicMock()
+    conversation_service = MagicMock()
+    answer_provider = MagicMock()
+
+    conversation_service.get_conversation.return_value = (
+        Conversation(
+            id=conversation_id,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            title="Knowledge conversation",
+        )
+    )
+
+    conversation_service.list_recent_messages.return_value = [
+        MagicMock(
+            role=MessageRole.USER,
+            content="What is KnowledgeHub?",
+        ),
+        MagicMock(
+            role=MessageRole.ASSISTANT,
+            content="It is a knowledge platform.",
+        ),
+    ]
+
+    retrieved = create_retrieved_chunk(
+        tenant_id=tenant_id,
+        content="KnowledgeHub uses FastAPI.",
+        chunk_index=0,
+        similarity=0.95,
+    )
+
+    retrieval_service.retrieve.return_value = [
+        retrieved,
+    ]
+
+    answer_provider.generate.return_value = (
+        AnswerGenerationResponse(
+            answer="It uses FastAPI."
+        )
+    )
+
+    service = RAGQuestionAnsweringService(
+        retrieval_service=retrieval_service,
+        answer_provider=answer_provider,
+        conversation_service=conversation_service,
+    )
+
+    result = service.ask(
+        db,
+        tenant_id=tenant_id,
+        user_id=user_id,
+        conversation_id=conversation_id,
+        question="What framework does it use?",
+    )
+
+    assert result.answer == "It uses FastAPI."
+
+    conversation_service.list_recent_messages.assert_called_once_with(
+        db,
+        conversation_id=conversation_id,
+        tenant_id=tenant_id,
+        user_id=user_id,
+        limit=10,
+    )
+
+    request = (
+        answer_provider.generate.call_args.args[0]
+    )
+
+    assert len(request.conversation_history) == 2
+
+    assert request.conversation_history[0].role == "user"
+    assert (
+        request.conversation_history[0].content
+        == "What is KnowledgeHub?"
+    )
+
+    assert (
+        request.conversation_history[1].role
+        == "assistant"
+    )
+
+    assert (
+        request.conversation_history[1].content
+        == "It is a knowledge platform."
+    )
+
+    assert request.question == (
+        "What framework does it use?"
+    )
+
+    assert "KnowledgeHub uses FastAPI." in (
+        request.context
+    )
+
+def test_ask_without_conversation_does_not_load_history():
+    db = MagicMock()
+
+    retrieval_service = MagicMock()
+    conversation_service = MagicMock()
+    answer_provider = MagicMock()
+
+    retrieved = create_retrieved_chunk(
+        tenant_id=uuid4(),
+        content="KnowledgeHub uses FastAPI.",
+        chunk_index=0,
+        similarity=0.95,
+    )
+
+    retrieval_service.retrieve.return_value = [
+        retrieved,
+    ]
+
+    answer_provider.generate.return_value = (
+        AnswerGenerationResponse(
+            answer="It uses FastAPI."
+        )
+    )
+
+    service = RAGQuestionAnsweringService(
+        retrieval_service=retrieval_service,
+        answer_provider=answer_provider,
+        conversation_service=conversation_service,
+    )
+
+    service.ask(
+        db,
+        tenant_id=uuid4(),
+        question="What framework does it use?",
+    )
+
+    conversation_service.get_conversation.assert_not_called()
+    conversation_service.list_recent_messages.assert_not_called()
+
+    request = (
+        answer_provider.generate.call_args.args[0]
+    )
+
+    assert request.conversation_history == []
+
+def test_invalid_conversation_history_limit_is_rejected():
+    with pytest.raises(
+        ValueError,
+        match="greater than zero",
+    ):
+        RAGQuestionAnsweringService(
+            conversation_history_limit=0,
+        )

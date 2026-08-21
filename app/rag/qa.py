@@ -9,6 +9,7 @@ from app.models.conversation import (
 from app.rag.answer_generation import (
     AnswerGenerationProvider,
     AnswerGenerationRequest,
+    ConversationHistoryMessage,
     DeterministicAnswerGenerationProvider,
 )
 from app.services.conversation import ConversationService
@@ -16,6 +17,9 @@ from app.services.retrieval import (
     RetrievedChunk,
     RetrievalService,
 )
+
+
+DEFAULT_CONVERSATION_HISTORY_LIMIT = 10
 
 
 @dataclass(frozen=True)
@@ -47,6 +51,9 @@ class RAGQuestionAnsweringService:
     When a conversation_id is supplied, the question and
     resulting answer/abstention are persisted through the
     existing ConversationService.
+
+    Previous conversation messages are supplied to the
+    answer-generation provider as conversational context.
     """
 
     def __init__(
@@ -59,10 +66,19 @@ class RAGQuestionAnsweringService:
             ConversationService | None
         ) = None,
         minimum_similarity: float = 0.0,
+        conversation_history_limit: int = (
+            DEFAULT_CONVERSATION_HISTORY_LIMIT
+        ),
     ) -> None:
         if not 0.0 <= minimum_similarity <= 1.0:
             raise ValueError(
                 "minimum_similarity must be between 0 and 1."
+            )
+
+        if conversation_history_limit < 1:
+            raise ValueError(
+                "conversation_history_limit must be "
+                "greater than zero."
             )
 
         self.retrieval_service = (
@@ -82,6 +98,10 @@ class RAGQuestionAnsweringService:
 
         self.minimum_similarity = (
             minimum_similarity
+        )
+
+        self.conversation_history_limit = (
+            conversation_history_limit
         )
 
     def ask(
@@ -109,6 +129,10 @@ class RAGQuestionAnsweringService:
                 "user_id is required when conversation_id is provided."
             )
 
+        conversation_history: list[
+            ConversationHistoryMessage
+        ] = []
+
         if conversation_id is not None:
             conversation = (
                 self.conversation_service.get_conversation(
@@ -123,6 +147,25 @@ class RAGQuestionAnsweringService:
                 raise ValueError(
                     "Conversation not found."
                 )
+
+            previous_messages = (
+                self.conversation_service
+                .list_recent_messages(
+                    db,
+                    conversation_id=conversation_id,
+                    tenant_id=tenant_id,
+                    user_id=user_id,
+                    limit=self.conversation_history_limit,
+                )
+            )
+
+            conversation_history = [
+                ConversationHistoryMessage(
+                    role=message.role.value,
+                    content=message.content,
+                )
+                for message in previous_messages
+            ]
 
         retrieved = self.retrieval_service.retrieve(
             db,
@@ -182,6 +225,7 @@ class RAGQuestionAnsweringService:
             AnswerGenerationRequest(
                 question=normalized_question,
                 context=context,
+                conversation_history=conversation_history,
             )
         )
 

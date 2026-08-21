@@ -3,9 +3,18 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
+class ConversationHistoryMessage:
+    role: str
+    content: str
+
+
+@dataclass(frozen=True)
 class AnswerGenerationRequest:
     question: str
     context: str
+    conversation_history: list[
+        ConversationHistoryMessage
+    ] | None = None
 
 
 @dataclass(frozen=True)

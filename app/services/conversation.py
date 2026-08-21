@@ -145,6 +145,41 @@ class ConversationService:
             conversation_id,
         )
 
+    def list_recent_messages(
+        self,
+        db: Session,
+        *,
+        conversation_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        user_id: uuid.UUID,
+        limit: int,
+    ) -> list[ConversationMessage]:
+        if limit < 1:
+            raise ValueError(
+                "limit must be greater than zero."
+            )
+
+        conversation = self.get_conversation(
+            db,
+            conversation_id=conversation_id,
+            tenant_id=tenant_id,
+            user_id=user_id,
+        )
+
+        if conversation is None:
+            raise ValueError(
+                "Conversation not found."
+            )
+
+        return (
+            self.message_repository
+            .list_recent_by_conversation(
+                db,
+                conversation_id,
+                limit=limit,
+            )
+        )
+
     def append_user_message(
         self,
         db: Session,

@@ -1,6 +1,8 @@
 from unittest.mock import MagicMock
 from uuid import uuid4
 
+import pytest
+
 from app.models.conversation import Conversation
 from app.models.enums import MessageRole
 from app.repositories.conversation import (
@@ -199,3 +201,61 @@ def test_list_messages_by_conversation():
 
     assert result == messages
     db.scalars.assert_called_once()
+
+def test_list_recent_messages_by_conversation():
+    db = MagicMock()
+    repository = ConversationMessageRepository()
+
+    conversation_id = uuid4()
+
+    messages = [
+        MagicMock(
+            message_index=0,
+            role=MessageRole.USER,
+            content="First question",
+        ),
+        MagicMock(
+            message_index=1,
+            role=MessageRole.ASSISTANT,
+            content="First answer",
+        ),
+        MagicMock(
+            message_index=2,
+            role=MessageRole.USER,
+            content="Second question",
+        ),
+    ]
+
+    # The repository query retrieves newest-first and
+    # reverses the result before returning it.
+    db.scalars.return_value.all.return_value = [
+        messages[2],
+        messages[1],
+    ]
+
+    result = repository.list_recent_by_conversation(
+        db,
+        conversation_id,
+        limit=2,
+    )
+
+    assert result == [
+        messages[1],
+        messages[2],
+    ]
+
+    db.scalars.assert_called_once()
+
+def test_list_recent_messages_rejects_invalid_limit():
+    db = MagicMock()
+    repository = ConversationMessageRepository()
+
+    with pytest.raises(
+        ValueError,
+        match="greater than zero",
+    ):
+        repository.list_recent_by_conversation(
+            db,
+            uuid4(),
+            limit=0,
+        )
