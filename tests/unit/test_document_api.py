@@ -2006,7 +2006,7 @@ def test_ask_question_rejects_whitespace_question():
 def test_ask_question_returns_grounded_answer():
     tenant_id = uuid4()
 
-    authenticate_as(
+    user = authenticate_as(
         role=UserRole.SUB_USER,
         tenant_id=tenant_id,
     )
@@ -2023,6 +2023,7 @@ def test_ask_question_returns_grounded_answer():
         "KnowledgeHub is a knowledge platform."
     )
     rag_result.abstained = False
+    rag_result.conversation_id = None
 
     source = MagicMock()
     source.chunk_id = source_chunk_id
@@ -2084,8 +2085,10 @@ def test_ask_question_returns_grounded_answer():
         rag_service.ask.assert_called_once_with(
             ANY,
             tenant_id=tenant_id,
+            user_id=user.id,
             question="What is KnowledgeHub?",
             top_k=3,
+            conversation_id=None,
         )
 
     finally:
@@ -2106,6 +2109,7 @@ def test_ask_question_can_abstain():
     rag_result.question = "Unknown question"
     rag_result.answer = None
     rag_result.abstained = True
+    rag_result.conversation_id = None
     rag_result.sources = []
 
     original_ask = rag_service.ask
@@ -2129,6 +2133,163 @@ def test_ask_question_can_abstain():
         assert body["answer"] is None
         assert body["abstained"] is True
         assert body["sources"] == []
+
+    finally:
+        rag_service.ask = original_ask
+        clear_authentication_override()
+
+def test_ask_question_persists_to_existing_conversation():
+    tenant_id = uuid4()
+    conversation_id = uuid4()
+
+    user = authenticate_as(
+        role=UserRole.SUB_USER,
+        tenant_id=tenant_id,
+    )
+
+    rag_result = MagicMock()
+
+    rag_result.question = (
+        "What is KnowledgeHub?"
+    )
+    rag_result.answer = (
+        "KnowledgeHub is a knowledge platform."
+    )
+    rag_result.abstained = False
+    rag_result.conversation_id = conversation_id
+
+    source = MagicMock()
+    source.chunk_id = uuid4()
+    source.document_id = uuid4()
+    source.document_filename = "handbook.pdf"
+    source.chunk_index = 0
+    source.similarity = 0.96
+
+    rag_result.sources = [source]
+
+    original_ask = rag_service.ask
+
+    rag_service.ask = MagicMock(
+        return_value=rag_result,
+    )
+
+    try:
+        response = client.post(
+            f"/documents/{tenant_id}/ask",
+            json={
+                "question": "What is KnowledgeHub?",
+                "top_k": 3,
+                "conversation_id": str(
+                    conversation_id,
+                ),
+            },
+        )
+
+        assert response.status_code == 200
+
+        body = response.json()
+
+        assert body["conversation_id"] == str(
+            conversation_id,
+        )
+
+        assert body["question"] == (
+            "What is KnowledgeHub?"
+        )
+
+        rag_service.ask.assert_called_once_with(
+            ANY,
+            tenant_id=tenant_id,
+            user_id=user.id,
+            question="What is KnowledgeHub?",
+            top_k=3,
+            conversation_id=conversation_id,
+        )
+
+    finally:
+        rag_service.ask = original_ask
+        clear_authentication_override()
+
+
+def test_ask_question_rejects_inaccessible_conversation():
+    tenant_id = uuid4()
+    conversation_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.SUB_USER,
+        tenant_id=tenant_id,
+    )
+
+    original_ask = rag_service.ask
+
+    rag_service.ask = MagicMock(
+        side_effect=ValueError(
+            "Conversation not found."
+        )
+    )
+
+    try:
+        response = client.post(
+            f"/documents/{tenant_id}/ask",
+            json={
+                "question": "What is KnowledgeHub?",
+                "conversation_id": str(
+                    conversation_id,
+                ),
+            },
+        )
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == (
+            "Conversation not found."
+        )
+
+    finally:
+        rag_service.ask = original_ask
+        clear_authentication_override()
+
+
+def test_ask_question_without_conversation_is_backward_compatible():
+    tenant_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.SUB_USER,
+        tenant_id=tenant_id,
+    )
+
+    rag_result = MagicMock()
+
+    rag_result.question = "What is KnowledgeHub?"
+    rag_result.answer = "KnowledgeHub."
+    rag_result.abstained = False
+    rag_result.sources = []
+    rag_result.conversation_id = None
+
+    original_ask = rag_service.ask
+
+    rag_service.ask = MagicMock(
+        return_value=rag_result,
+    )
+
+    try:
+        response = client.post(
+            f"/documents/{tenant_id}/ask",
+            json={
+                "question": "What is KnowledgeHub?",
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json()["conversation_id"] is None
+
+        rag_service.ask.assert_called_once_with(
+            ANY,
+            tenant_id=tenant_id,
+            user_id=ANY,
+            question="What is KnowledgeHub?",
+            top_k=5,
+            conversation_id=None,
+        )
 
     finally:
         rag_service.ask = original_ask

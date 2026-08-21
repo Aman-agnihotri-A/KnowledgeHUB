@@ -3,11 +3,15 @@ from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
+from app.models.conversation import (
+    ConversationMessage,
+)
 from app.rag.answer_generation import (
     AnswerGenerationProvider,
     AnswerGenerationRequest,
     DeterministicAnswerGenerationProvider,
 )
+from app.services.conversation import ConversationService
 from app.services.retrieval import (
     RetrievedChunk,
     RetrievalService,
@@ -29,6 +33,7 @@ class RAGAnswer:
     answer: str | None
     abstained: bool
     sources: list[RAGSource]
+    conversation_id: uuid.UUID | None
 
 
 class RAGQuestionAnsweringService:
@@ -38,6 +43,10 @@ class RAGQuestionAnsweringService:
     Retrieval remains tenant-safe because it delegates to
     RetrievalService, which already scopes candidates by
     tenant and READY document state.
+
+    When a conversation_id is supplied, the question and
+    resulting answer/abstention are persisted through the
+    existing ConversationService.
     """
 
     def __init__(
@@ -45,6 +54,9 @@ class RAGQuestionAnsweringService:
         retrieval_service: RetrievalService | None = None,
         answer_provider: (
             AnswerGenerationProvider | None
+        ) = None,
+        conversation_service: (
+            ConversationService | None
         ) = None,
         minimum_similarity: float = 0.0,
     ) -> None:
@@ -63,6 +75,11 @@ class RAGQuestionAnsweringService:
             or DeterministicAnswerGenerationProvider()
         )
 
+        self.conversation_service = (
+            conversation_service
+            or ConversationService()
+        )
+
         self.minimum_similarity = (
             minimum_similarity
         )
@@ -72,8 +89,10 @@ class RAGQuestionAnsweringService:
         db: Session,
         *,
         tenant_id: uuid.UUID,
+        user_id: uuid.UUID | None = None,
         question: str,
         top_k: int = 5,
+        conversation_id: uuid.UUID | None = None,
     ) -> RAGAnswer:
         normalized_question = question.strip()
 
@@ -81,6 +100,29 @@ class RAGQuestionAnsweringService:
             raise ValueError(
                 "Question cannot be empty."
             )
+
+        if (
+            conversation_id is not None
+            and user_id is None
+        ):
+            raise ValueError(
+                "user_id is required when conversation_id is provided."
+            )
+
+        if conversation_id is not None:
+            conversation = (
+                self.conversation_service.get_conversation(
+                    db,
+                    conversation_id=conversation_id,
+                    tenant_id=tenant_id,
+                    user_id=user_id,
+                )
+            )
+
+            if conversation is None:
+                raise ValueError(
+                    "Conversation not found."
+                )
 
         retrieved = self.retrieval_service.retrieve(
             db,
@@ -101,12 +143,35 @@ class RAGQuestionAnsweringService:
             for result in eligible
         ]
 
+        if conversation_id is not None:
+            self.conversation_service.append_user_message(
+                db,
+                conversation_id=conversation_id,
+                tenant_id=tenant_id,
+                user_id=user_id,
+                content=normalized_question,
+            )
+
         if not eligible:
+            if conversation_id is not None:
+                self.conversation_service.append_assistant_message(
+                    db,
+                    conversation_id=conversation_id,
+                    tenant_id=tenant_id,
+                    user_id=user_id,
+                    content=(
+                        "I could not find relevant information "
+                        "in the available knowledge base."
+                    ),
+                    sources=[],
+                )
+
             return RAGAnswer(
                 question=normalized_question,
                 answer=None,
                 abstained=True,
                 sources=[],
+                conversation_id=conversation_id,
             )
 
         context = self._build_context(
@@ -120,11 +185,27 @@ class RAGQuestionAnsweringService:
             )
         )
 
+        if conversation_id is not None:
+            persisted_sources = [
+                self._source_to_metadata(source)
+                for source in sources
+            ]
+
+            self.conversation_service.append_assistant_message(
+                db,
+                conversation_id=conversation_id,
+                tenant_id=tenant_id,
+                user_id=user_id,
+                content=generated.answer,
+                sources=persisted_sources,
+            )
+
         return RAGAnswer(
             question=normalized_question,
             answer=generated.answer,
             abstained=False,
             sources=sources,
+            conversation_id=conversation_id,
         )
 
     @staticmethod
@@ -161,3 +242,17 @@ class RAGQuestionAnsweringService:
             chunk_index=chunk.chunk_index,
             similarity=result.similarity,
         )
+
+    @staticmethod
+    def _source_to_metadata(
+        source: RAGSource,
+    ) -> dict:
+        return {
+            "chunk_id": str(source.chunk_id),
+            "document_id": str(source.document_id),
+            "document_filename": (
+                source.document_filename
+            ),
+            "chunk_index": source.chunk_index,
+            "similarity": source.similarity,
+        }

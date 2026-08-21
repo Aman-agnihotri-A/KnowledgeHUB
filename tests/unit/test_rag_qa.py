@@ -6,6 +6,7 @@ import pytest
 from app.models.document import Document
 from app.models.document_chunk import DocumentChunk
 from app.models.enums import DocumentStatus
+from app.models.conversation import Conversation
 from app.rag.answer_generation import (
     AnswerGenerationResponse,
 )
@@ -307,4 +308,232 @@ def test_context_contains_source_metadata():
     assert (
         "Important policy information."
         in request.context
+    )
+
+def test_ask_persists_question_and_answer_in_conversation():
+    db = MagicMock()
+
+    tenant_id = uuid4()
+    user_id = uuid4()
+    conversation_id = uuid4()
+
+    retrieval_service = MagicMock()
+    conversation_service = MagicMock()
+    answer_provider = MagicMock()
+
+    conversation_service.get_conversation.return_value = (
+        Conversation(
+            id=conversation_id,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            title="Knowledge",
+        )
+    )
+
+    answer = MagicMock()
+    answer.answer = (
+        "KnowledgeHub is a knowledge platform."
+    )
+
+    answer_provider.generate.return_value = answer
+
+    service = RAGQuestionAnsweringService(
+        retrieval_service=retrieval_service,
+        answer_provider=answer_provider,
+        conversation_service=conversation_service,
+    )
+
+    retrieval_service.retrieve.return_value = []
+
+    result = service.ask(
+        db,
+        tenant_id=tenant_id,
+        user_id=user_id,
+        conversation_id=conversation_id,
+        question="  What is KnowledgeHub?  ",
+    )
+
+    assert result.question == (
+        "What is KnowledgeHub?"
+    )
+    assert result.answer is None
+    assert result.abstained is True
+
+    conversation_service.get_conversation.assert_called_once_with(
+        db,
+        conversation_id=conversation_id,
+        tenant_id=tenant_id,
+        user_id=user_id,
+    )
+
+    conversation_service.append_user_message.assert_called_once_with(
+        db,
+        conversation_id=conversation_id,
+        tenant_id=tenant_id,
+        user_id=user_id,
+        content="What is KnowledgeHub?",
+    )
+
+    conversation_service.append_assistant_message.assert_called_once()
+
+
+def test_ask_rejects_inaccessible_conversation():
+    db = MagicMock()
+
+    conversation_service = MagicMock()
+
+    conversation_service.get_conversation.return_value = None
+
+    service = RAGQuestionAnsweringService(
+        retrieval_service=MagicMock(),
+        answer_provider=MagicMock(),
+        conversation_service=conversation_service,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Conversation not found",
+    ):
+        service.ask(
+            db,
+            tenant_id=uuid4(),
+            user_id=uuid4(),
+            conversation_id=uuid4(),
+            question="What is KnowledgeHub?",
+        )
+
+
+def test_ask_requires_user_id_for_conversation():
+    db = MagicMock()
+
+    service = RAGQuestionAnsweringService(
+        retrieval_service=MagicMock(),
+        answer_provider=MagicMock(),
+        conversation_service=MagicMock(),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="user_id is required",
+    ):
+        service.ask(
+            db,
+            tenant_id=uuid4(),
+            user_id=None,
+            conversation_id=uuid4(),
+            question="What is KnowledgeHub?",
+        )
+
+
+def test_ask_without_conversation_remains_backward_compatible():
+    db = MagicMock()
+
+    retrieval_service = MagicMock()
+    conversation_service = MagicMock()
+
+    service = RAGQuestionAnsweringService(
+        retrieval_service=retrieval_service,
+        answer_provider=MagicMock(),
+        conversation_service=conversation_service,
+    )
+
+    retrieval_service.retrieve.return_value = []
+
+    result = service.ask(
+        db,
+        tenant_id=uuid4(),
+        question="What is KnowledgeHub?",
+    )
+
+    assert result.conversation_id is None
+
+    conversation_service.get_conversation.assert_not_called()
+    conversation_service.append_user_message.assert_not_called()
+    conversation_service.append_assistant_message.assert_not_called()
+
+def test_ask_persists_grounded_answer_and_sources():
+    db = MagicMock()
+
+    tenant_id = uuid4()
+    user_id = uuid4()
+    conversation_id = uuid4()
+
+    retrieval_service = MagicMock()
+    conversation_service = MagicMock()
+    answer_provider = MagicMock()
+
+    conversation_service.get_conversation.return_value = (
+        Conversation(
+            id=conversation_id,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            title="Knowledge",
+        )
+    )
+
+    chunk = MagicMock()
+    chunk.id = uuid4()
+    chunk.document_id = uuid4()
+    chunk.document.filename = "handbook.pdf"
+    chunk.chunk_index = 3
+    chunk.content = "KnowledgeHub is a knowledge platform."
+
+    retrieved = MagicMock()
+    retrieved.chunk = chunk
+    retrieved.similarity = 0.95
+
+    retrieval_service.retrieve.return_value = [
+        retrieved,
+    ]
+
+    generated = MagicMock()
+    generated.answer = (
+        "KnowledgeHub is a knowledge platform."
+    )
+
+    answer_provider.generate.return_value = generated
+
+    service = RAGQuestionAnsweringService(
+        retrieval_service=retrieval_service,
+        answer_provider=answer_provider,
+        conversation_service=conversation_service,
+    )
+
+    result = service.ask(
+        db,
+        tenant_id=tenant_id,
+        user_id=user_id,
+        conversation_id=conversation_id,
+        question="What is KnowledgeHub?",
+    )
+
+    assert result.answer == (
+        "KnowledgeHub is a knowledge platform."
+    )
+    assert result.abstained is False
+    assert result.conversation_id == conversation_id
+
+    conversation_service.append_user_message.assert_called_once_with(
+        db,
+        conversation_id=conversation_id,
+        tenant_id=tenant_id,
+        user_id=user_id,
+        content="What is KnowledgeHub?",
+    )
+
+    conversation_service.append_assistant_message.assert_called_once_with(
+        db,
+        conversation_id=conversation_id,
+        tenant_id=tenant_id,
+        user_id=user_id,
+        content="KnowledgeHub is a knowledge platform.",
+        sources=[
+            {
+                "chunk_id": str(chunk.id),
+                "document_id": str(chunk.document_id),
+                "document_filename": "handbook.pdf",
+                "chunk_index": 3,
+                "similarity": 0.95,
+            }
+        ],
     )

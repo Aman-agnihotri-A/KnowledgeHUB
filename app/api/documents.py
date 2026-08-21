@@ -237,8 +237,10 @@ def ask_question(
         result = rag_service.ask(
             db,
             tenant_id=tenant_id,
+            user_id=current_user.id,
             question=payload.question,
             top_k=payload.top_k,
+            conversation_id=payload.conversation_id,
         )
     except ValueError as exc:
         raise HTTPException(
@@ -250,6 +252,7 @@ def ask_question(
         question=result.question,
         answer=result.answer,
         abstained=result.abstained,
+        conversation_id=result.conversation_id,
         sources=[
             RAGSourceRead(
                 chunk_id=source.chunk_id,

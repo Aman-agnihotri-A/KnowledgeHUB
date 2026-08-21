@@ -1,4 +1,4 @@
-import uuid
+import uuid 
 
 import pytest
 from sqlalchemy.exc import IntegrityError
@@ -652,3 +652,59 @@ def test_tenant_deletion_cascades_conversations() -> None:
             )
             is None
         )
+
+def test_conversation_message_supports_rag_source_metadata():
+    from sqlalchemy.orm import Session
+
+    tenant = Tenant(
+        name="RAG Tenant",
+        slug="rag-tenant",
+    )
+
+    with Session(engine) as session:
+        session.add(tenant)
+        session.flush()
+
+        user = User(
+            tenant_id=tenant.id,
+            email="rag-user@example.com",
+            hashed_password="hashed-password",
+            full_name="RAG User",
+            role=UserRole.SUB_USER,
+        )
+
+        session.add(user)
+        session.flush()
+
+        conversation = Conversation(
+            tenant_id=tenant.id,
+            user_id=user.id,
+            title="RAG conversation",
+        )
+
+        session.add(conversation)
+        session.flush()
+
+        sources = [
+            {
+                "chunk_id": str(uuid.uuid4()),
+                "document_id": str(uuid.uuid4()),
+                "document_filename": "handbook.pdf",
+                "chunk_index": 2,
+                "similarity": 0.94,
+            }
+        ]
+
+        message = ConversationMessage(
+            conversation_id=conversation.id,
+            message_index=0,
+            role=MessageRole.ASSISTANT,
+            content="Grounded answer.",
+            sources=sources,
+        )
+
+        session.add(message)
+        session.commit()
+        session.refresh(message)
+
+        assert message.sources == sources

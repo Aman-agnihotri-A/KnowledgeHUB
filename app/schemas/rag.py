@@ -12,6 +12,7 @@ class RAGAskRequest(BaseModel):
         ge=1,
         le=50,
     )
+    conversation_id: uuid.UUID | None = None
 
 
 class RAGSourceRead(BaseModel):
@@ -27,3 +28,4 @@ class RAGAskResponse(BaseModel):
     answer: str | None
     abstained: bool
     sources: list[RAGSourceRead]
+    conversation_id: uuid.UUID | None = None
