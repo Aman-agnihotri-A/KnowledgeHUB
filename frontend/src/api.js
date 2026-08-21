@@ -179,6 +179,22 @@ export async function login(
   );
 }
 
+export async function listTenants() {
+  return request("/tenants");
+}
+
+export async function createTenant(
+  tenant,
+) {
+  return request(
+    "/tenants",
+    {
+      method: "POST",
+      body: JSON.stringify(tenant),
+    },
+  );
+}
+
 export async function listConversations(
   tenantId,
 ) {

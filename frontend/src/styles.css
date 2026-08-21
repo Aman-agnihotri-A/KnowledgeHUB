@@ -668,3 +668,161 @@ button:disabled {
     justify-content: space-between;
   }
 }
+
+.admin-page {
+  min-height: 100vh;
+  background: #f5f7fb;
+}
+
+.admin-header {
+  min-height: 76px;
+  padding: 18px 28px;
+  background: #ffffff;
+  border-bottom: 1px solid #e3e7ef;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.admin-header strong {
+  display: block;
+}
+
+.admin-content {
+  width: min(1000px, 100%);
+  margin: 0 auto;
+  padding: 28px 24px 48px;
+  display: grid;
+  gap: 18px;
+}
+
+.admin-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.admin-title h1 {
+  margin: 0 0 6px;
+  font-size: 24px;
+}
+
+.admin-title p {
+  margin: 0;
+}
+
+.admin-card {
+  background: #ffffff;
+  border: 1px solid #e1e6ef;
+  border-radius: 12px;
+  padding: 18px;
+}
+
+.admin-card-header {
+  margin-bottom: 16px;
+}
+
+.admin-card-header h2 {
+  margin: 0 0 4px;
+  font-size: 17px;
+}
+
+.admin-card-header p {
+  margin: 0;
+  font-size: 13px;
+}
+
+.admin-form {
+  display: grid;
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.admin-form label {
+  display: grid;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.admin-form input,
+.admin-form select {
+  width: 100%;
+  padding: 10px 11px;
+  border: 1px solid #d6dce7;
+  border-radius: 9px;
+  background: #ffffff;
+  outline: none;
+}
+
+.admin-form input:focus,
+.admin-form select:focus {
+  border-color: #536dfe;
+  box-shadow:
+    0 0 0 3px #536dfe1f;
+}
+
+.admin-form button {
+  align-self: end;
+}
+
+.tenant-list {
+  display: grid;
+  gap: 8px;
+}
+
+.tenant-card {
+  width: 100%;
+  padding: 13px 14px;
+  background: #fafbfc;
+  border: 1px solid #e1e6ef;
+  border-radius: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  text-align: left;
+}
+
+.tenant-card:hover,
+.tenant-card.selected {
+  background: #eef2fa;
+  border-color: #cbd4e5;
+}
+
+.tenant-card > span:first-child {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.tenant-card strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tenant-card small {
+  color: #7b8495;
+}
+
+@media (max-width: 760px) {
+  .admin-header {
+    padding: 14px 16px;
+  }
+
+  .admin-content {
+    padding: 18px 16px 32px;
+  }
+
+  .admin-title {
+    flex-direction: column;
+  }
+
+  .admin-form {
+    grid-template-columns: 1fr;
+  }
+}

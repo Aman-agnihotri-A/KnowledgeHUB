@@ -13,6 +13,7 @@ import {
   listConversations,
   listDocuments,
   listTenantUsers,
+  listTenants,
   login,
   processDocument,
   updateTenantUserStatus,
@@ -873,6 +874,672 @@ function UserManager({
   );
 }
 
+function SuperAdminPage({
+  session,
+  onLogout,
+}) {
+  const [tenants, setTenants] =
+    useState([]);
+
+  const [
+    selectedTenantId,
+    setSelectedTenantId,
+  ] = useState(null);
+
+  const [users, setUsers] =
+    useState([]);
+
+  const [loadingTenants, setLoadingTenants] =
+    useState(true);
+
+  const [loadingUsers, setLoadingUsers] =
+    useState(false);
+
+  const [creatingTenant, setCreatingTenant] =
+    useState(false);
+
+  const [creatingUser, setCreatingUser] =
+    useState(false);
+
+  const [updatingUserId, setUpdatingUserId] =
+    useState(null);
+
+  const [error, setError] =
+    useState("");
+
+  const [tenantForm, setTenantForm] =
+    useState({
+      name: "",
+      slug: "",
+    });
+
+  const [userForm, setUserForm] =
+    useState({
+      full_name: "",
+      email: "",
+      password: "",
+      role: "tenant_admin",
+    });
+
+  async function loadTenants() {
+    setLoadingTenants(true);
+    setError("");
+
+    try {
+      const result =
+        await listTenants();
+
+      setTenants(result);
+
+      if (
+        result.length > 0 &&
+        !selectedTenantId
+      ) {
+        setSelectedTenantId(
+          result[0].id,
+        );
+      }
+    } catch (err) {
+      setError(
+        err.message ||
+          "Unable to load tenants.",
+      );
+    } finally {
+      setLoadingTenants(false);
+    }
+  }
+
+  async function loadUsers(
+    tenantId,
+  ) {
+    if (!tenantId) {
+      setUsers([]);
+      return;
+    }
+
+    setLoadingUsers(true);
+    setError("");
+
+    try {
+      const result =
+        await listTenantUsers(
+          tenantId,
+        );
+
+      setUsers(result);
+    } catch (err) {
+      setError(
+        err.message ||
+          "Unable to load tenant users.",
+      );
+    } finally {
+      setLoadingUsers(false);
+    }
+  }
+
+  useEffect(() => {
+    loadTenants();
+  }, []);
+
+  useEffect(() => {
+    loadUsers(
+      selectedTenantId,
+    );
+  }, [selectedTenantId]);
+
+  function handleTenantChange(
+    event,
+  ) {
+    const {
+      name,
+      value,
+    } = event.target;
+
+    setTenantForm(
+      (current) => ({
+        ...current,
+        [name]: value,
+      }),
+    );
+  }
+
+  function handleUserChange(
+    event,
+  ) {
+    const {
+      name,
+      value,
+    } = event.target;
+
+    setUserForm(
+      (current) => ({
+        ...current,
+        [name]: value,
+      }),
+    );
+  }
+
+  async function handleCreateTenant(
+    event,
+  ) {
+    event.preventDefault();
+
+    if (creatingTenant) {
+      return;
+    }
+
+    setCreatingTenant(true);
+    setError("");
+
+    try {
+      const tenant =
+        await createTenant({
+          name:
+            tenantForm.name.trim(),
+          slug:
+            tenantForm.slug.trim(),
+        });
+
+      setTenants(
+        (current) => [
+          tenant,
+          ...current,
+        ],
+      );
+
+      setSelectedTenantId(
+        tenant.id,
+      );
+
+      setTenantForm({
+        name: "",
+        slug: "",
+      });
+    } catch (err) {
+      setError(
+        err.message ||
+          "Unable to create tenant.",
+      );
+    } finally {
+      setCreatingTenant(false);
+    }
+  }
+
+  async function handleCreateUser(
+    event,
+  ) {
+    event.preventDefault();
+
+    if (
+      creatingUser ||
+      !selectedTenantId
+    ) {
+      return;
+    }
+
+    setCreatingUser(true);
+    setError("");
+
+    try {
+      const user =
+        await createTenantUser(
+          selectedTenantId,
+          {
+            full_name:
+              userForm.full_name.trim(),
+            email:
+              userForm.email.trim(),
+            password:
+              userForm.password,
+            role:
+              userForm.role,
+          },
+        );
+
+      setUsers(
+        (current) => [
+          user,
+          ...current,
+        ],
+      );
+
+      setUserForm({
+        full_name: "",
+        email: "",
+        password: "",
+        role: "tenant_admin",
+      });
+    } catch (err) {
+      setError(
+        err.message ||
+          "Unable to create user.",
+      );
+    } finally {
+      setCreatingUser(false);
+    }
+  }
+
+  async function handleStatusChange(
+    user,
+  ) {
+    if (
+      updatingUserId ||
+      !selectedTenantId
+    ) {
+      return;
+    }
+
+    setUpdatingUserId(
+      user.id,
+    );
+    setError("");
+
+    try {
+      const updated =
+        await updateTenantUserStatus(
+          selectedTenantId,
+          user.id,
+          !user.is_active,
+        );
+
+      setUsers(
+        (current) =>
+          current.map(
+            (item) =>
+              item.id === updated.id
+                ? updated
+                : item,
+          ),
+      );
+    } catch (err) {
+      setError(
+        err.message ||
+          "Unable to update user.",
+      );
+    } finally {
+      setUpdatingUserId(null);
+    }
+  }
+
+  const selectedTenant =
+    tenants.find(
+      (tenant) =>
+        tenant.id ===
+        selectedTenantId,
+    );
+
+  return (
+    <main className="admin-page">
+      <header className="admin-header">
+        <div>
+          <strong>
+            KnowledgeHub
+          </strong>
+
+          <span className="sidebar-label">
+            Super Admin
+          </span>
+        </div>
+
+        <button
+          type="button"
+          className="secondary-button"
+          onClick={onLogout}
+        >
+          Sign out
+        </button>
+      </header>
+
+      <section className="admin-content">
+        <div className="admin-title">
+          <div>
+            <h1>
+              Tenant Management
+            </h1>
+
+            <p className="muted">
+              Create tenants and
+              manage their users.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={loadTenants}
+            disabled={
+              loadingTenants
+            }
+          >
+            Refresh
+          </button>
+        </div>
+
+        {error && (
+          <div className="error-banner">
+            {error}
+          </div>
+        )}
+
+        <section className="admin-card">
+          <div className="admin-card-header">
+            <div>
+              <h2>
+                Create Tenant
+              </h2>
+
+              <p className="muted">
+                Add a new tenant to
+                KnowledgeHub.
+              </p>
+            </div>
+          </div>
+
+          <form
+            className="admin-form"
+            onSubmit={
+              handleCreateTenant
+            }
+          >
+            <label>
+              Tenant name
+
+              <input
+                name="name"
+                type="text"
+                value={
+                  tenantForm.name
+                }
+                onChange={
+                  handleTenantChange
+                }
+                required
+              />
+            </label>
+
+            <label>
+              Tenant slug
+
+              <input
+                name="slug"
+                type="text"
+                value={
+                  tenantForm.slug
+                }
+                onChange={
+                  handleTenantChange
+                }
+                required
+              />
+            </label>
+
+            <button
+              type="submit"
+              className="primary-button"
+              disabled={
+                creatingTenant
+              }
+            >
+              {creatingTenant
+                ? "Creating..."
+                : "Create Tenant"}
+            </button>
+          </form>
+        </section>
+
+        <section className="admin-card">
+          <div className="admin-card-header">
+            <div>
+              <h2>
+                Tenants
+              </h2>
+
+              <p className="muted">
+                Select a tenant to
+                manage its users.
+              </p>
+            </div>
+          </div>
+
+          {loadingTenants ? (
+            <p className="document-empty">
+              Loading tenants...
+            </p>
+          ) : tenants.length === 0 ? (
+            <p className="document-empty">
+              No tenants yet.
+            </p>
+          ) : (
+            <div className="tenant-list">
+              {tenants.map(
+                (tenant) => (
+                  <button
+                    type="button"
+                    key={tenant.id}
+                    className={
+                      tenant.id ===
+                      selectedTenantId
+                        ? "tenant-card selected"
+                        : "tenant-card"
+                    }
+                    onClick={() =>
+                      setSelectedTenantId(
+                        tenant.id,
+                      )
+                    }
+                  >
+                    <span>
+                      <strong>
+                        {tenant.name}
+                      </strong>
+
+                      <small>
+                        {tenant.slug}
+                      </small>
+                    </span>
+
+                    <span
+                      className={
+                        tenant.is_active
+                          ? "status-active"
+                          : "status-inactive"
+                      }
+                    >
+                      {tenant.is_active
+                        ? "ACTIVE"
+                        : "INACTIVE"}
+                    </span>
+                  </button>
+                ),
+              )}
+            </div>
+          )}
+        </section>
+
+        {selectedTenant && (
+          <section className="admin-card">
+            <div className="admin-card-header">
+              <div>
+                <h2>
+                  {selectedTenant.name}
+                </h2>
+
+                <p className="muted">
+                  Manage users for{" "}
+                  {selectedTenant.slug}.
+                </p>
+              </div>
+            </div>
+
+            <form
+              className="admin-form"
+              onSubmit={
+                handleCreateUser
+              }
+            >
+              <label>
+                Full name
+
+                <input
+                  name="full_name"
+                  type="text"
+                  value={
+                    userForm.full_name
+                  }
+                  onChange={
+                    handleUserChange
+                  }
+                  required
+                />
+              </label>
+
+              <label>
+                Email
+
+                <input
+                  name="email"
+                  type="email"
+                  value={
+                    userForm.email
+                  }
+                  onChange={
+                    handleUserChange
+                  }
+                  required
+                />
+              </label>
+
+              <label>
+                Temporary password
+
+                <input
+                  name="password"
+                  type="password"
+                  value={
+                    userForm.password
+                  }
+                  onChange={
+                    handleUserChange
+                  }
+                  minLength={8}
+                  required
+                />
+              </label>
+
+              <label>
+                Role
+
+                <select
+                  name="role"
+                  value={
+                    userForm.role
+                  }
+                  onChange={
+                    handleUserChange
+                  }
+                >
+                  <option value="tenant_admin">
+                    Tenant Admin
+                  </option>
+
+                  <option value="sub_user">
+                    Sub User
+                  </option>
+                </select>
+              </label>
+
+              <button
+                type="submit"
+                className="primary-button"
+                disabled={
+                  creatingUser
+                }
+              >
+                {creatingUser
+                  ? "Creating..."
+                  : "Create User"}
+              </button>
+            </form>
+
+            <div className="user-list">
+              {loadingUsers ? (
+                <p className="document-empty">
+                  Loading users...
+                </p>
+              ) : users.length ===
+                0 ? (
+                <p className="document-empty">
+                  No users yet.
+                </p>
+              ) : (
+                users.map(
+                  (user) => (
+                    <article
+                      key={user.id}
+                      className="user-card"
+                    >
+                      <div className="user-info">
+                        <strong>
+                          {
+                            user.full_name
+                          }
+                        </strong>
+
+                        <span>
+                          {user.email}
+                        </span>
+
+                        <span>
+                          {user.role}
+                        </span>
+                      </div>
+
+                      <div className="user-actions">
+                        <span
+                          className={
+                            user.is_active
+                              ? "status-active"
+                              : "status-inactive"
+                          }
+                        >
+                          {user.is_active
+                            ? "ACTIVE"
+                            : "INACTIVE"}
+                        </span>
+
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={() =>
+                            handleStatusChange(
+                              user,
+                            )
+                          }
+                          disabled={
+                            updatingUserId ===
+                            user.id
+                          }
+                        >
+                          {updatingUserId ===
+                          user.id
+                            ? "Updating..."
+                            : user.is_active
+                              ? "Deactivate"
+                              : "Activate"}
+                        </button>
+                      </div>
+                    </article>
+                  ),
+                )
+              )}
+            </div>
+          </section>
+        )}
+      </section>
+    </main>
+  );
+}
+
 function ChatPage({
   session,
   onLogout,
@@ -1110,30 +1777,6 @@ function ChatPage({
     }
   }
 
-  const isSuperAdmin =
-    session.role ===
-    "super_admin";
-
-  if (isSuperAdmin) {
-    return (
-      <div className="unsupported-page">
-        <h1>KnowledgeHub</h1>
-
-        <p>
-          Chat is currently
-          available to tenant users.
-        </p>
-
-        <button
-          type="button"
-          className="primary-button"
-          onClick={onLogout}
-        >
-          Sign out
-        </button>
-      </div>
-    );
-  }
 
   return (
     <main className="app-shell">
@@ -1314,6 +1957,18 @@ export default function App() {
       />
     );
   }
+
+    if (
+        session.role ===
+        "super_admin"
+    ) {
+        return (
+        <SuperAdminPage
+            session={session}
+            onLogout={handleLogout}
+        />
+        );
+    }
 
   return (
     <ChatPage

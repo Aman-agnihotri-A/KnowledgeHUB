@@ -10,16 +10,18 @@ import {
 
 
 import {
-    listDocuments,
-    processDocument,
-    uploadDocument,
-    askQuestion,
-    clearSession,
-    getSession,
-    login,
-    createTenantUser,
-    listTenantUsers,
-    updateTenantUserStatus,
+  listDocuments,
+  processDocument,
+  uploadDocument,
+  askQuestion,
+  clearSession,
+  getSession,
+  login,
+  createTenant,
+  listTenants,
+  createTenantUser,
+  listTenantUsers,
+  updateTenantUserStatus,
 } from "./api";
 
 describe("frontend API client", () => {
@@ -27,6 +29,167 @@ describe("frontend API client", () => {
     sessionStorage.clear();
     vi.restoreAllMocks();
   });
+
+  it("lists tenants for a Super Admin", async () => {
+  const token =
+    createTestJwt({
+      sub: "super-admin-1",
+      role: "super_admin",
+      tenant_id: null,
+    });
+
+  sessionStorage.setItem(
+    "knowledgehub_session",
+    JSON.stringify({
+      accessToken: token,
+      tokenType: "bearer",
+      userId: "super-admin-1",
+      role: "super_admin",
+      tenantId: null,
+    }),
+  );
+
+  const fetchMock =
+    vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify([
+          {
+            id: "tenant-1",
+            name: "Acme Corp",
+            slug: "acme",
+            is_active: true,
+          },
+        ]),
+        {
+          status: 200,
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+        },
+      ),
+    );
+
+  vi.stubGlobal(
+    "fetch",
+    fetchMock,
+  );
+
+  const result =
+    await listTenants();
+
+  expect(result).toHaveLength(1);
+
+  expect(result[0]).toEqual({
+    id: "tenant-1",
+    name: "Acme Corp",
+    slug: "acme",
+    is_active: true,
+  });
+
+  expect(
+    fetchMock,
+  ).toHaveBeenCalledWith(
+    "/tenants",
+    expect.objectContaining({
+      headers:
+        expect.any(Headers),
+    }),
+  );
+
+  expect(
+    fetchMock.mock.calls[0][1]
+      .headers.get("Authorization"),
+  ).toBe(
+    `Bearer ${token}`,
+  );
+});
+
+it("creates a tenant for a Super Admin", async () => {
+  const token =
+    createTestJwt({
+      sub: "super-admin-1",
+      role: "super_admin",
+      tenant_id: null,
+    });
+
+  sessionStorage.setItem(
+    "knowledgehub_session",
+    JSON.stringify({
+      accessToken: token,
+      tokenType: "bearer",
+      userId: "super-admin-1",
+      role: "super_admin",
+      tenantId: null,
+    }),
+  );
+
+  const fetchMock =
+    vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: "tenant-2",
+          name: "New Tenant",
+          slug: "new-tenant",
+          is_active: true,
+        }),
+        {
+          status: 201,
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+        },
+      ),
+    );
+
+  vi.stubGlobal(
+    "fetch",
+    fetchMock,
+  );
+
+  const result =
+    await createTenant({
+      name: "New Tenant",
+      slug: "new-tenant",
+    });
+
+  expect(result).toEqual({
+    id: "tenant-2",
+    name: "New Tenant",
+    slug: "new-tenant",
+    is_active: true,
+  });
+
+  const [
+    url,
+    options,
+  ] =
+    fetchMock.mock.calls[0];
+
+  expect(url).toBe(
+    "/tenants",
+  );
+
+  expect(options.method).toBe(
+    "POST",
+  );
+
+  expect(
+    JSON.parse(options.body),
+  ).toEqual({
+    name: "New Tenant",
+    slug: "new-tenant",
+  });
+
+  expect(
+    options.headers.get(
+      "Authorization",
+    ),
+  ).toBe(
+    `Bearer ${token}`,
+  );
+});
 
   it("lists tenant users", async () => {
   const token =
