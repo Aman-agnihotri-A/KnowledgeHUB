@@ -24,6 +24,10 @@ class Settings(BaseSettings):
 
     openai_model: str = "gpt-5.6-luna"
 
+    gemini_api_key: str | None = None
+
+    gemini_model: str = "gemini-3.6-flash"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

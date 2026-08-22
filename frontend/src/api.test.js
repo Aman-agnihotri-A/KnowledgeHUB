@@ -23,6 +23,7 @@ import {
   createTenantUser,
   listTenantUsers,
   updateTenantUserStatus,
+  getRagReadiness,
 } from "./api";
 
 describe("frontend API client", () => {
@@ -1049,3 +1050,69 @@ function createTestJwt(
     "signature",
   ].join(".");
 }
+
+it("gets RAG readiness", async () => {
+  const token =
+    createTestJwt({
+      sub: "user-1",
+      role: "sub_user",
+      tenant_id: "tenant-1",
+    });
+
+  sessionStorage.setItem(
+    "knowledgehub_session",
+    JSON.stringify({
+      accessToken: token,
+      tokenType: "bearer",
+      userId: "user-1",
+      role: "sub_user",
+      tenantId: "tenant-1",
+    }),
+  );
+
+  const fetchMock =
+    vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ready: true,
+          provider:
+            "deterministic-grounded-v1",
+          retrieval: "available",
+        }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+        },
+      ),
+    );
+
+  vi.stubGlobal(
+    "fetch",
+    fetchMock,
+  );
+
+  const result =
+    await getRagReadiness(
+      "tenant-1",
+    );
+
+  expect(result).toEqual({
+    ready: true,
+    provider:
+      "deterministic-grounded-v1",
+    retrieval: "available",
+  });
+
+  expect(
+    fetchMock,
+  ).toHaveBeenCalledWith(
+    "/rag/tenant-1/readiness",
+    expect.objectContaining({
+      headers:
+        expect.any(Headers),
+    }),
+  );
+});

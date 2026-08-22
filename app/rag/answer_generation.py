@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
+from google import genai
 from openai import OpenAI
 
 
@@ -90,12 +91,6 @@ class OpenAIAnswerGenerationProvider(
     """
     Production answer-generation provider backed by
     the OpenAI Responses API.
-
-    Retrieved document context is treated as the only
-    factual grounding source.
-
-    Conversation history is supplied only to resolve
-    conversational references and continuity.
     """
 
     def __init__(
@@ -235,11 +230,164 @@ class OpenAIAnswerGenerationProvider(
         )
 
 
+class GeminiAnswerGenerationProvider(
+    AnswerGenerationProvider,
+):
+    """
+    Answer-generation provider backed by Google's
+    Gemini API.
+
+    Retrieved document context is treated as the only
+    factual grounding source.
+
+    Conversation history is supplied only to resolve
+    conversational references and continuity.
+    """
+
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        model: str,
+        client: genai.Client | None = None,
+    ) -> None:
+        normalized_api_key = api_key.strip()
+        normalized_model = model.strip()
+
+        if not normalized_api_key:
+            raise ValueError(
+                "Gemini API key is required."
+            )
+
+        if not normalized_model:
+            raise ValueError(
+                "Gemini model is required."
+            )
+
+        self._model = normalized_model
+
+        self._client = client or genai.Client(
+            api_key=normalized_api_key,
+        )
+
+    @property
+    def model_name(self) -> str:
+        return self._model
+
+    def generate(
+        self,
+        request: AnswerGenerationRequest,
+    ) -> AnswerGenerationResponse:
+        question = request.question.strip()
+        context = request.context.strip()
+
+        if not question:
+            raise ValueError(
+                "Question cannot be empty."
+            )
+
+        if not context:
+            raise ValueError(
+                "Grounding context cannot be empty."
+            )
+
+        prompt = self._build_prompt(request)
+
+        try:
+            response = (
+                self._client.models.generate_content(
+                    model=self._model,
+                    contents=prompt,
+                )
+            )
+        except Exception as exc:
+            raise AnswerGenerationError(
+                "Gemini answer generation failed."
+            ) from exc
+
+        answer = getattr(
+            response,
+            "text",
+            None,
+        )
+
+        if not isinstance(answer, str):
+            raise AnswerGenerationError(
+                "Gemini returned an invalid answer."
+            )
+
+        answer = answer.strip()
+
+        if not answer:
+            raise AnswerGenerationError(
+                "Gemini returned an empty answer."
+            )
+
+        return AnswerGenerationResponse(
+            answer=answer,
+        )
+
+    @staticmethod
+    def _build_prompt(
+        request: AnswerGenerationRequest,
+    ) -> str:
+        history = (
+            request.conversation_history
+            or []
+        )
+
+        history_lines: list[str] = []
+
+        for message in history:
+            role = message.role.strip().lower()
+            content = message.content.strip()
+
+            if not role or not content:
+                continue
+
+            history_lines.append(
+                f"{role}: {content}"
+            )
+
+        conversation_section = (
+            "\n".join(history_lines)
+            if history_lines
+            else "(No previous conversation.)"
+        )
+
+        return (
+            "You are the answer-generation component "
+            "of KnowledgeHub, a multi-tenant knowledge "
+            "assistance system.\n\n"
+            "Answer the user's question using ONLY the "
+            "retrieved knowledge-base context as the "
+            "factual source.\n\n"
+            "Conversation history may be used to resolve "
+            "references such as 'it', 'they', or 'that', "
+            "but previous assistant messages are not "
+            "authoritative knowledge sources.\n\n"
+            "If the retrieved context does not contain "
+            "enough information to answer the question, "
+            "say that the available knowledge base does "
+            "not contain enough information. Do not "
+            "invent facts.\n\n"
+            "Be concise and directly answer the question.\n\n"
+            "CONVERSATION HISTORY:\n"
+            f"{conversation_section}\n\n"
+            "RETRIEVED KNOWLEDGE:\n"
+            f"{request.context.strip()}\n\n"
+            "CURRENT QUESTION:\n"
+            f"{request.question.strip()}"
+        )
+
+
 def create_answer_generation_provider(
     *,
     provider_name: str,
     openai_api_key: str | None,
     openai_model: str,
+    gemini_api_key: str | None = None,
+    gemini_model: str = "gemini-3.6-flash",
 ) -> AnswerGenerationProvider:
     normalized_provider = (
         provider_name.strip().lower()
@@ -260,6 +408,18 @@ def create_answer_generation_provider(
         return OpenAIAnswerGenerationProvider(
             api_key=openai_api_key,
             model=openai_model,
+        )
+
+    if normalized_provider == "gemini":
+        if not gemini_api_key:
+            raise ValueError(
+                "Gemini API key is required when "
+                "ANSWER_GENERATION_PROVIDER is 'gemini'."
+            )
+
+        return GeminiAnswerGenerationProvider(
+            api_key=gemini_api_key,
+            model=gemini_model,
         )
 
     raise ValueError(

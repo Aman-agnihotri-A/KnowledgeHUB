@@ -19,6 +19,7 @@ import {
   processDocument,
   updateTenantUserStatus,
   uploadDocument,
+  getRagReadiness,
 } from "./api";
 
 function LoginPage({
@@ -1690,6 +1691,9 @@ function ChatPage({
     sending,
     setSending,
   ] = useState(false);
+  
+  const [ragUnavailable, setRagUnavailable] =
+  useState(false);
 
   const [
     error,
@@ -1797,6 +1801,8 @@ function ChatPage({
   ) {
     event.preventDefault();
 
+    setRagUnavailable(false);
+
     const trimmed =
       question.trim();
 
@@ -1880,10 +1886,22 @@ function ChatPage({
             ),
       );
     } catch (err) {
-      setError(
+      const message =
         err.message ||
-          "Unable to process your question.",
-      );
+        "Unable to process your question.";
+
+      if (
+        message.toLowerCase().includes(
+          "answer generation",
+        ) ||
+        message.toLowerCase().includes(
+          "service unavailable",
+        )
+      ) {
+        setRagUnavailable(true);
+      }
+
+      setError(message);
     } finally {
       setSending(false);
     }
@@ -1947,6 +1965,19 @@ function ChatPage({
         {error && (
           <div className="error-banner page-error">
             {error}
+          </div>
+        )}
+        {ragUnavailable && (
+          <div className="rag-unavailable-banner">
+            <strong>
+              Knowledge Assistant temporarily unavailable
+            </strong>
+
+            <span>
+              The RAG answer-generation service
+              could not complete this request.
+              Your question was not lost.
+            </span>
           </div>
         )}
 

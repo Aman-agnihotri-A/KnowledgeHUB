@@ -438,6 +438,14 @@ export async function downloadDocument(
   URL.revokeObjectURL(url);
 }
 
+export async function getRagReadiness(
+  tenantId,
+) {
+  return request(
+    `/rag/${tenantId}/readiness`,
+  );
+}
+
 export async function listTenantUsers(
   tenantId,
 ) {

@@ -8,6 +8,7 @@ from app.models.conversation import (
 )
 from app.core.config import settings
 from app.rag.answer_generation import (
+    AnswerGenerationError,
     AnswerGenerationProvider,
     AnswerGenerationRequest,
     ConversationHistoryMessage,
@@ -95,8 +96,9 @@ class RAGQuestionAnsweringService:
                 ),
                 openai_api_key=settings.openai_api_key,
                 openai_model=settings.openai_model,
+                gemini_api_key=settings.gemini_api_key,
+                gemini_model=settings.gemini_model,
             )
-
         )
 
         self.conversation_service = (
@@ -229,13 +231,20 @@ class RAGQuestionAnsweringService:
             eligible,
         )
 
-        generated = self.answer_provider.generate(
-            AnswerGenerationRequest(
-                question=normalized_question,
-                context=context,
-                conversation_history=conversation_history,
+        try:
+            generated = self.answer_provider.generate(
+                AnswerGenerationRequest(
+                    question=normalized_question,
+                    context=context,
+                    conversation_history=conversation_history,
+                )
             )
-        )
+        except AnswerGenerationError:
+            raise
+        except Exception as exc:
+            raise AnswerGenerationError(
+                "Answer Generation Failed."
+            ) from exc
 
         if conversation_id is not None:
             persisted_sources = [

@@ -8,6 +8,9 @@ from app.dependencies.auth import get_current_user
 from app.main import app
 from app.models.enums import UserRole
 from app.rag.qa import RAGAnswer, RAGSource
+from app.rag.answer_generation import (
+    AnswerGenerationError,
+)
 
 
 client = TestClient(app)
@@ -321,4 +324,40 @@ def test_rag_rejects_invalid_top_k():
         assert response.status_code == 422
 
     finally:
+        clear_authentication_override()
+
+def test_rag_maps_answer_generation_failure_to_503():
+    tenant_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.SUB_USER,
+        tenant_id=tenant_id,
+    )
+
+    original_ask = rag_service.ask
+
+    rag_service.ask = MagicMock(
+        side_effect=AnswerGenerationError(
+            "OpenAI answer generation failed."
+        ),
+    )
+
+    try:
+        response = client.post(
+            f"/rag/{tenant_id}/ask",
+            json={
+                "question": (
+                    "What is this document about?"
+                ),
+            },
+        )
+
+        assert response.status_code == 503
+
+        assert response.json()["detail"] == (
+            "OpenAI answer generation failed."
+        )
+
+    finally:
+        rag_service.ask = original_ask
         clear_authentication_override()

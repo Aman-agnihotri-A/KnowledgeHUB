@@ -7,6 +7,7 @@ from app.rag.answer_generation import (
     AnswerGenerationRequest,
     ConversationHistoryMessage,
     DeterministicAnswerGenerationProvider,
+    GeminiAnswerGenerationProvider,
     OpenAIAnswerGenerationProvider,
     create_answer_generation_provider,
 )
@@ -46,6 +47,210 @@ class FakeOpenAIClient:
             output_text=output_text,
         )
 
+class FakeGeminiModels:
+    def __init__(
+        self,
+        *,
+        text="Generated Gemini answer.",
+    ):
+        self.text = text
+        self.model = None
+        self.contents = None
+
+    def generate_content(
+        self,
+        *,
+        model,
+        contents,
+    ):
+        self.model = model
+        self.contents = contents
+
+        return SimpleNamespace(
+            text=self.text,
+        )
+
+
+class FakeGeminiClient:
+    def __init__(
+        self,
+        *,
+        text="Generated Gemini answer.",
+    ):
+        self.models = FakeGeminiModels(
+            text=text,
+        )
+
+def test_gemini_provider_generates_answer():
+    client = FakeGeminiClient(
+        text="KnowledgeHub uses FastAPI."
+    )
+
+    provider = GeminiAnswerGenerationProvider(
+        api_key="test-key",
+        model="gemini-3.6-flash",
+        client=client,
+    )
+
+    result = provider.generate(
+        AnswerGenerationRequest(
+            question="What framework does it use?",
+            context=(
+                "[Source: handbook.pdf, chunk 0]\n"
+                "KnowledgeHub uses FastAPI."
+            ),
+        )
+    )
+
+    assert result.answer == (
+        "KnowledgeHub uses FastAPI."
+    )
+
+    assert client.models.model == (
+        "gemini-3.6-flash"
+    )
+
+    assert (
+        "What framework does it use?"
+        in client.models.contents
+    )
+
+    assert (
+        "KnowledgeHub uses FastAPI."
+        in client.models.contents
+    )
+
+def test_gemini_provider_includes_conversation_history():
+    client = FakeGeminiClient()
+
+    provider = GeminiAnswerGenerationProvider(
+        api_key="test-key",
+        model="gemini-3.6-flash",
+        client=client,
+    )
+
+    provider.generate(
+        AnswerGenerationRequest(
+            question="What framework does it use?",
+            context="KnowledgeHub uses FastAPI.",
+            conversation_history=[
+                ConversationHistoryMessage(
+                    role="user",
+                    content="What is KnowledgeHub?",
+                ),
+                ConversationHistoryMessage(
+                    role="assistant",
+                    content=(
+                        "It is a knowledge platform."
+                    ),
+                ),
+            ],
+        )
+    )
+
+    prompt = client.models.contents
+
+    assert (
+        "user: What is KnowledgeHub?"
+        in prompt
+    )
+
+    assert (
+        "assistant: It is a knowledge platform."
+        in prompt
+    )
+
+    assert (
+        "KnowledgeHub uses FastAPI."
+        in prompt
+    )
+
+def test_gemini_provider_rejects_missing_api_key():
+    with pytest.raises(
+        ValueError,
+        match="Gemini API key is required",
+    ):
+        GeminiAnswerGenerationProvider(
+            api_key="   ",
+            model="gemini-3.6-flash",
+            client=FakeGeminiClient(),
+        )
+
+
+def test_gemini_provider_rejects_missing_model():
+    with pytest.raises(
+        ValueError,
+        match="Gemini model is required",
+    ):
+        GeminiAnswerGenerationProvider(
+            api_key="test-key",
+            model="   ",
+            client=FakeGeminiClient(),
+        )
+
+def test_gemini_provider_wraps_client_failure():
+    class FailingGeminiModels:
+        def generate_content(
+            self,
+            *,
+            model,
+            contents,
+        ):
+            raise RuntimeError(
+                "simulated Gemini failure"
+            )
+
+    class FailingGeminiClient:
+        models = FailingGeminiModels()
+
+    provider = GeminiAnswerGenerationProvider(
+        api_key="test-key",
+        model="gemini-3.6-flash",
+        client=FailingGeminiClient(),
+    )
+
+    with pytest.raises(
+        AnswerGenerationError,
+        match="Gemini answer generation failed",
+    ):
+        provider.generate(
+            AnswerGenerationRequest(
+                question="Question",
+                context="Some context",
+            )
+        )
+
+def test_create_gemini_provider():
+    provider = create_answer_generation_provider(
+        provider_name="gemini",
+        openai_api_key=None,
+        openai_model="test-model",
+        gemini_api_key="test-key",
+        gemini_model="gemini-3.6-flash",
+    )
+
+    assert isinstance(
+        provider,
+        GeminiAnswerGenerationProvider,
+    )
+
+    assert provider.model_name == (
+        "gemini-3.6-flash"
+    )
+
+
+def test_create_gemini_provider_requires_api_key():
+    with pytest.raises(
+        ValueError,
+        match="Gemini API key is required",
+    ):
+        create_answer_generation_provider(
+            provider_name="gemini",
+            openai_api_key=None,
+            openai_model="test-model",
+            gemini_api_key=None,
+            gemini_model="gemini-3.6-flash",
+        )
 
 def test_deterministic_provider_generates_grounded_answer():
     provider = (

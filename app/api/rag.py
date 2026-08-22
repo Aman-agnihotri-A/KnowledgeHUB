@@ -20,6 +20,10 @@ from app.schemas.rag import (
     RAGSourceRead,
 )
 
+from app.rag.answer_generation import (
+    AnswerGenerationError,
+)
+
 
 router = APIRouter(
     prefix="/rag",
@@ -29,6 +33,22 @@ router = APIRouter(
 
 rag_service = RAGQuestionAnsweringService()
 
+@router.get(
+    "/{tenant_id}/readiness",
+)
+def rag_readiness(
+    tenant_id: uuid.UUID,
+    current_user: User = Depends(
+        require_conversation_user_access,
+    ),
+) -> dict[str, object]:
+    return {
+        "ready": True,
+        "provider": (
+            rag_service.answer_provider.model_name
+        ),
+        "retrieval": "available",
+    }
 
 @router.post(
     "/{tenant_id}/ask",
@@ -54,6 +74,12 @@ def ask_question(
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+    except AnswerGenerationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(exc),
         ) from exc
 
