@@ -85,3 +85,11 @@ class DocumentRepository:
         db.refresh(document)
 
         return document
+
+    def delete(
+        self,
+        db: Session,
+        document: Document,
+    ) -> None:
+        db.delete(document)
+        db.commit()

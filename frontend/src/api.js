@@ -438,6 +438,18 @@ export async function downloadDocument(
   URL.revokeObjectURL(url);
 }
 
+export async function deleteDocument(
+  tenantId,
+  documentId,
+) {
+  return request(
+    `/documents/${tenantId}/${documentId}`,
+    {
+      method: "DELETE",
+    },
+  );
+}
+
 export async function getRagReadiness(
   tenantId,
 ) {

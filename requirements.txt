@@ -11,3 +11,4 @@ PyJWT
 python-multipart
 pypdf
 openai
+google-genai

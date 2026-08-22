@@ -1067,3 +1067,120 @@ def test_get_document_file_raises_when_file_missing():
             document_id=document.id,
             tenant_id=tenant_id,
         )
+
+def test_delete_document():
+    db = MagicMock()
+    document_repository = MagicMock()
+    user_repository = MagicMock()
+    storage_service = MagicMock()
+
+    service = DocumentService(
+        document_repository=document_repository,
+        user_repository=user_repository,
+        storage_service=storage_service,
+    )
+
+    tenant_id = uuid4()
+
+    document = Document(
+        tenant_id=tenant_id,
+        uploaded_by=uuid4(),
+        filename="knowledge.pdf",
+        storage_path=(
+            f"{tenant_id}/knowledge.pdf"
+        ),
+    )
+
+    document_repository.get_by_id.return_value = (
+        document
+    )
+
+    service.delete_document(
+        db,
+        document_id=document.id,
+        tenant_id=tenant_id,
+    )
+
+    document_repository.get_by_id.assert_called_once_with(
+        db,
+        document.id,
+    )
+
+    document_repository.delete.assert_called_once_with(
+        db,
+        document,
+    )
+
+    storage_service.delete.assert_called_once_with(
+        document.storage_path,
+    )
+
+def test_delete_document_hides_other_tenant_document():
+    db = MagicMock()
+    document_repository = MagicMock()
+    user_repository = MagicMock()
+    storage_service = MagicMock()
+
+    service = DocumentService(
+        document_repository=document_repository,
+        user_repository=user_repository,
+        storage_service=storage_service,
+    )
+
+    requested_tenant_id = uuid4()
+    other_tenant_id = uuid4()
+
+    document = Document(
+        tenant_id=other_tenant_id,
+        uploaded_by=uuid4(),
+        filename="secret.pdf",
+        storage_path=(
+            f"{other_tenant_id}/secret.pdf"
+        ),
+    )
+
+    document_repository.get_by_id.return_value = (
+        document
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Document not found.",
+    ):
+        service.delete_document(
+            db,
+            document_id=document.id,
+            tenant_id=requested_tenant_id,
+        )
+
+    document_repository.delete.assert_not_called()
+
+    storage_service.delete.assert_not_called()
+
+def test_delete_document_rejects_missing_document():
+    db = MagicMock()
+    document_repository = MagicMock()
+    user_repository = MagicMock()
+    storage_service = MagicMock()
+
+    service = DocumentService(
+        document_repository=document_repository,
+        user_repository=user_repository,
+        storage_service=storage_service,
+    )
+
+    document_repository.get_by_id.return_value = None
+
+    with pytest.raises(
+        ValueError,
+        match="Document not found.",
+    ):
+        service.delete_document(
+            db,
+            document_id=uuid4(),
+            tenant_id=uuid4(),
+        )
+
+    document_repository.delete.assert_not_called()
+
+    storage_service.delete.assert_not_called()

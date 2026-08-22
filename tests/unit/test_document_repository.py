@@ -185,3 +185,25 @@ def test_list_documents_by_tenant_and_status():
 
     assert result == documents
     db.scalars.assert_called_once()
+
+def test_delete_document():
+    db = MagicMock()
+    repository = DocumentRepository()
+
+    document = Document(
+        tenant_id=uuid4(),
+        uploaded_by=uuid4(),
+        filename="knowledge.pdf",
+        storage_path="documents/knowledge.pdf",
+    )
+
+    repository.delete(
+        db,
+        document,
+    )
+
+    db.delete.assert_called_once_with(
+        document,
+    )
+
+    db.commit.assert_called_once()

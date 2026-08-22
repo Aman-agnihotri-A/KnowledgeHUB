@@ -32,6 +32,65 @@ describe("frontend API client", () => {
     vi.restoreAllMocks();
   });
 
+  it("deletes a tenant document", async () => {
+  const token =
+    createTestJwt({
+      sub: "admin-1",
+      role: "tenant_admin",
+      tenant_id: "tenant-1",
+    });
+
+  sessionStorage.setItem(
+    "knowledgehub_session",
+    JSON.stringify({
+      accessToken: token,
+      tokenType: "bearer",
+      userId: "admin-1",
+      role: "tenant_admin",
+      tenantId: "tenant-1",
+    }),
+  );
+
+  const fetchMock =
+    vi.fn().mockResolvedValue(
+      new Response(null, {
+        status: 204,
+      }),
+    );
+
+  vi.stubGlobal(
+    "fetch",
+    fetchMock,
+  );
+
+  const result =
+    await deleteDocument(
+      "tenant-1",
+      "document-1",
+    );
+
+  expect(result).toBeNull();
+
+  expect(
+    fetchMock,
+  ).toHaveBeenCalledWith(
+    "/documents/tenant-1/document-1",
+    expect.objectContaining({
+      method: "DELETE",
+      headers:
+        expect.any(Headers),
+    }),
+  );
+
+  expect(
+    fetchMock.mock.calls[0][1]
+      .headers.get(
+        "Authorization",
+      ),
+  ).toBe(
+    `Bearer ${token}`,
+  );
+});
   it("lists documents using a status filter", async () => {
   const token =
     createTestJwt({

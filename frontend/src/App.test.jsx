@@ -33,10 +33,12 @@ import {
   processDocument,
   updateTenantUserStatus,
   uploadDocument,
+  deleteDocument,
 } from "./api";
 
 vi.mock("./api", () => ({
   askQuestion: vi.fn(),
+  deleteDocument: vi.fn(),
   clearSession: vi.fn(),
   createConversation: vi.fn(),
   createTenantUser: vi.fn(),
@@ -125,7 +127,9 @@ const conversationWithMessages = {
 describe("KnowledgeHub frontend workflows", () => {
   beforeEach(() => {
     sessionStorage.clear();
-
+    deleteDocument.mockResolvedValue(
+    undefined,
+    );
     vi.clearAllMocks();
 
     getSession.mockReturnValue(null);
@@ -848,4 +852,111 @@ describe("KnowledgeHub frontend workflows", () => {
       }),
     ).toBeInTheDocument();
   });
+});
+
+it("allows a Tenant Admin to delete a document", async () => {
+  getSession.mockReturnValue(
+    tenantAdminSession,
+  );
+
+  listDocuments.mockResolvedValue([
+    documentFixture,
+  ]);
+
+  deleteDocument.mockResolvedValue(
+    undefined,
+  );
+
+  vi.spyOn(
+    window,
+    "confirm",
+  ).mockReturnValue(true);
+
+  render(<App />);
+
+  await screen.findByText(
+    "KnowledgeHub_Guide.pdf",
+  );
+
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: "Delete",
+    }),
+  );
+
+  await waitFor(() => {
+    expect(
+      deleteDocument,
+    ).toHaveBeenCalledWith(
+      "tenant-1",
+      "document-1",
+    );
+  });
+
+  await waitFor(() => {
+    expect(
+      screen.queryByText(
+        "KnowledgeHub_Guide.pdf",
+      ),
+    ).not.toBeInTheDocument();
+  });
+});
+
+it("does not show document deletion controls to Sub Users", async () => {
+  getSession.mockReturnValue(
+    subUserSession,
+  );
+
+  listDocuments.mockResolvedValue([
+    documentFixture,
+  ]);
+
+  render(<App />);
+
+  await screen.findByText(
+    "KnowledgeHub_Guide.pdf",
+  );
+
+  expect(
+    screen.queryByRole("button", {
+      name: "Delete",
+    }),
+  ).not.toBeInTheDocument();
+});
+
+it("does not delete a document when deletion is cancelled", async () => {
+  getSession.mockReturnValue(
+    tenantAdminSession,
+  );
+
+  listDocuments.mockResolvedValue([
+    documentFixture,
+  ]);
+
+  vi.spyOn(
+    window,
+    "confirm",
+  ).mockReturnValue(false);
+
+  render(<App />);
+
+  await screen.findByText(
+    "KnowledgeHub_Guide.pdf",
+  );
+
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: "Delete",
+    }),
+  );
+
+  expect(
+    deleteDocument,
+  ).not.toHaveBeenCalled();
+
+  expect(
+    screen.getByText(
+      "KnowledgeHub_Guide.pdf",
+    ),
+  ).toBeInTheDocument();
 });

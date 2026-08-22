@@ -228,6 +228,40 @@ class DocumentService:
 
         return document, path
 
+    def delete_document(
+        self,
+        db: Session,
+        *,
+        document_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+    ) -> None:
+        if self.storage_service is None:
+            raise ValueError(
+                "Document storage is not configured."
+            )
+
+        document = self.get_document(
+            db,
+            document_id,
+            tenant_id,
+        )
+
+        if document is None:
+            raise ValueError(
+                "Document not found."
+            )
+
+        storage_path = document.storage_path
+
+        self.document_repository.delete(
+            db,
+            document,
+        )
+
+        self.storage_service.delete(
+            storage_path,
+        )
+
     def list_tenant_documents(
         self,
         db: Session,

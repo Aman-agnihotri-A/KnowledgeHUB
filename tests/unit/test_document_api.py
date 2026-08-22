@@ -2294,3 +2294,169 @@ def test_ask_question_without_conversation_is_backward_compatible():
     finally:
         rag_service.ask = original_ask
         clear_authentication_override()
+
+def test_delete_document_requires_authentication():
+    tenant_id = uuid4()
+    document_id = uuid4()
+
+    response = client.delete(
+        f"/documents/{tenant_id}/{document_id}",
+    )
+
+    assert response.status_code == 401
+
+def test_delete_document_rejects_invalid_jwt():
+    tenant_id = uuid4()
+    document_id = uuid4()
+
+    response = client.delete(
+        f"/documents/{tenant_id}/{document_id}",
+        headers={
+            "Authorization": "Bearer invalid-token",
+        },
+    )
+
+    assert response.status_code == 401
+
+def test_delete_document_tenant_admin_own_tenant():
+    tenant_id = uuid4()
+    document_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.TENANT_ADMIN,
+        tenant_id=tenant_id,
+    )
+
+    original_service = (
+        document_service.delete_document
+    )
+
+    document_service.delete_document = MagicMock()
+
+    try:
+        response = client.delete(
+            f"/documents/{tenant_id}/{document_id}",
+        )
+
+        assert response.status_code == 204
+
+        document_service.delete_document.assert_called_once_with(
+            ANY,
+            document_id=document_id,
+            tenant_id=tenant_id,
+        )
+
+    finally:
+        document_service.delete_document = (
+            original_service
+        )
+        clear_authentication_override()
+
+def test_delete_document_sub_user_is_forbidden():
+    tenant_id = uuid4()
+    document_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.SUB_USER,
+        tenant_id=tenant_id,
+    )
+
+    try:
+        response = client.delete(
+            f"/documents/{tenant_id}/{document_id}",
+        )
+
+        assert response.status_code == 403
+
+    finally:
+        clear_authentication_override()
+
+def test_delete_document_tenant_admin_other_tenant():
+    user_tenant_id = uuid4()
+    requested_tenant_id = uuid4()
+    document_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.TENANT_ADMIN,
+        tenant_id=user_tenant_id,
+    )
+
+    try:
+        response = client.delete(
+            f"/documents/{requested_tenant_id}/{document_id}",
+        )
+
+        assert response.status_code == 403
+
+    finally:
+        clear_authentication_override()
+
+def test_delete_document_not_found():
+    tenant_id = uuid4()
+    document_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.TENANT_ADMIN,
+        tenant_id=tenant_id,
+    )
+
+    original_service = (
+        document_service.delete_document
+    )
+
+    document_service.delete_document = MagicMock(
+        side_effect=ValueError(
+            "Document not found."
+        ),
+    )
+
+    try:
+        response = client.delete(
+            f"/documents/{tenant_id}/{document_id}",
+        )
+
+        assert response.status_code == 404
+
+        assert response.json()["detail"] == (
+            "Document not found."
+        )
+
+    finally:
+        document_service.delete_document = (
+            original_service
+        )
+        clear_authentication_override()
+
+def test_delete_document_super_admin_other_tenant():
+    tenant_id = uuid4()
+    document_id = uuid4()
+
+    authenticate_as(
+        role=UserRole.SUPER_ADMIN,
+        tenant_id=None,
+    )
+
+    original_service = (
+        document_service.delete_document
+    )
+
+    document_service.delete_document = MagicMock()
+
+    try:
+        response = client.delete(
+            f"/documents/{tenant_id}/{document_id}",
+        )
+
+        assert response.status_code == 204
+
+        document_service.delete_document.assert_called_once_with(
+            ANY,
+            document_id=document_id,
+            tenant_id=tenant_id,
+        )
+
+    finally:
+        document_service.delete_document = (
+            original_service
+        )
+        clear_authentication_override()

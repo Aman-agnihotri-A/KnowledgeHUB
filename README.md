@@ -1,14 +1,12 @@
 # KnowledgeHub
 
-KnowledgeHub is a multi-tenant AI-powered knowledge-assistance platform built with FastAPI, PostgreSQL, SQLAlchemy, Alembic, JWT authentication, React, and a tenant-isolated RAG pipeline.
+KnowledgeHub is a multi-tenant AI-powered knowledge-assistance platform that allows organizations to securely manage their documents and provide tenant-isolated, retrieval-augmented question answering.
 
-The project is being developed incrementally using production-oriented engineering practices: layered architecture, explicit authorization boundaries, tenant isolation, migrations, automated tests, CI, configurable AI providers, and a frontend that reflects the backend security model.
-
----
+The platform is being built using production-oriented software engineering practices, including layered architecture, role-based authorization, tenant isolation, database migrations, automated testing, CI, configurable AI providers, persistent conversations, and a React frontend.
 
 ## Current Status
 
-The current system provides:
+KnowledgeHub currently includes:
 
 - JWT authentication
 - Role-based authorization
@@ -16,34 +14,45 @@ The current system provides:
 - Super Admin tenant management
 - Tenant Admin user management
 - Sub User access control
-- PDF document upload and storage
+- PDF document upload
+- Tenant-scoped document management
 - Document lifecycle management
-- Document processing and chunking
+- PDF processing and text extraction
+- Document chunking
 - Deterministic document embeddings
 - Tenant-safe semantic retrieval
 - Grounded RAG question answering
-- Abstention when relevant knowledge is unavailable
+- RAG abstention when relevant knowledge is unavailable
 - Persistent conversations and messages
 - Conversation-history-aware RAG
-- Configurable deterministic/OpenAI answer generation
-- React frontend integration for authentication, documents, RAG conversations, tenant users, and Super Admin tenant management
+- Configurable answer-generation providers
+- Deterministic local answer generation
+- OpenAI answer generation
+- Google Gemini answer generation
+- React frontend
+- Knowledge chat interface
+- Tenant document workspace
+- Tenant user management frontend
+- Super Admin tenant management frontend
 - Frontend API tests with Vitest
 - Backend tests with pytest
-- Frontend production build with Vite
+- Frontend production builds with Vite
 - GitHub Actions CI
+- Docker-based PostgreSQL development environment
 
-The latest completed frontend milestone is Super Admin tenant management.
+The project is still under active development. The current focus is completing and validating the end-to-end frontend workflow and strengthening the production-readiness of the platform.
 
 ---
 
-## Completed Development Sequence
+# Development Progress
 
-The sprint identifiers below describe the development sequence we have actually implemented. They are not GitHub Issues or a GitHub-maintained sprint board.
+The project is being implemented incrementally through numbered development sprints.
 
-### KH-001 → KH-008
-Engineering foundation:
+## KH-001 → KH-008 — Engineering Foundation
 
-- Project structure
+Established the project foundation:
+
+- Application structure
 - PostgreSQL connectivity
 - SQLAlchemy foundation
 - Alembic migrations
@@ -52,83 +61,136 @@ Engineering foundation:
 - Docker development setup
 - GitHub Actions CI
 
-### KH-009
-Core domain and relational data model.
+## KH-009 — Core Domain Model
 
-### KH-010 → KH-018
-Repository and service-layer development for:
+Established the initial relational domain model for:
 
 - Tenants
 - Users
 - Documents
+- Document chunks
+- Domain relationships
+
+## KH-010 → KH-018 — Repository and Service Layers
+
+Implemented repository and service-layer foundations for:
+
+- Tenant management
+- User management
+- Document management
 - Database access
 - Business rules
 - API foundations
 
-### KH-019
-Authentication foundation.
+## KH-019 → KH-023 — Authentication and Authorization
 
-### KH-020
-JWT authentication and login.
+Implemented:
 
-### KH-021
-JWT request authentication and current-user dependency.
+- Authentication foundation
+- JWT login
+- Current-user authentication dependency
+- Role-based authorization
+- Tenant authorization
+- Protected document APIs
 
-### KH-022
-Role-based authorization.
+## KH-024 → KH-028 — Tenant and Document Management
 
-### KH-023
-Tenant authorization and protected document APIs.
+Implemented:
 
-### KH-024
-Tenant and user management APIs.
+- Tenant management APIs
+- Tenant user management APIs
+- Document lifecycle management
+- Tenant-safe document status transitions
+- Tenant-safe document filtering
+- Physical document storage
+- Secure document downloads
 
-### KH-025
-Document lifecycle management and tenant-safe status transitions.
+## KH-029 — Document Processing
 
-### KH-026
-Tenant user lifecycle management and role-safe user creation.
+Implemented PDF document processing:
 
-### KH-027
-Tenant-safe document status filtering.
+```text
+PDF
+ │
+ ▼
+Text Extraction
+ │
+ ▼
+Chunking
+ │
+ ▼
+Persisted Document Chunks
+```
 
-### KH-028
-Physical document storage and secure document download.
+## KH-030 — Document Embeddings
 
-### KH-029
-Document processing and PDF chunking.
+Implemented deterministic document embeddings for the RAG pipeline.
 
-### KH-030
-Document embeddings.
+## KH-031 — Tenant-Safe Semantic Retrieval
 
-### KH-031
-Tenant-safe semantic retrieval.
+Implemented tenant-scoped semantic retrieval using document chunk embeddings.
 
-### KH-032
-Grounded RAG question answering and abstention.
+The retrieval layer ensures that chunks from another tenant cannot become part of a tenant's retrieval context.
 
-### KH-033
-Conversation persistence foundation.
+## KH-032 — Grounded RAG Q&A
 
-### KH-034
-Conversation-aware RAG Q&A persistence.
+Implemented:
 
-### KH-035
-Conversation-history-aware RAG context.
+- RAG question answering
+- Retrieved-context grounding
+- Similarity thresholds
+- Abstention when relevant knowledge is unavailable
 
-### KH-036
-Configurable answer-generation providers, including deterministic local generation and OpenAI generation.
+The system does not treat unrelated knowledge as valid context simply because a question was submitted.
 
-### KH-037
-RAG provider test isolation from environment configuration.
+## KH-033 → KH-035 — Persistent Conversations
 
-### KH-038
-Frontend knowledge chat, document management integration, and frontend API tests.
+Implemented:
 
-### KH-039
-Tenant User Management frontend.
+- Conversation persistence
+- Message persistence
+- Conversation-aware RAG Q&A
+- Conversation history
+- Conversational context for follow-up questions
 
-Tenant Admin can:
+Conversation history can help resolve conversational references, while retrieved document context remains the authoritative factual source.
+
+## KH-036 — Configurable Answer Generation
+
+Introduced a provider abstraction for answer generation.
+
+Supported providers include:
+
+```text
+Deterministic
+OpenAI
+Gemini
+```
+
+The provider is selected through environment configuration.
+
+## KH-037 — Provider Test Isolation
+
+Improved RAG provider tests so they remain isolated from environment-specific configuration.
+
+## KH-038 — Frontend Knowledge Chat
+
+Implemented the initial React knowledge-assistance workflow:
+
+- Authentication
+- Conversation list
+- Conversation selection
+- New conversations
+- Persistent message history
+- RAG question submission
+- Retrieved source display
+- Tenant document integration
+
+## KH-039 — Tenant User Management
+
+Implemented Tenant Admin user management.
+
+Tenant Admins can:
 
 - View Sub Users
 - Create Sub Users
@@ -137,10 +199,11 @@ Tenant Admin can:
 
 Sub Users cannot access Tenant User Management.
 
-### KH-040
-Super Admin tenant management frontend.
+## KH-040 — Super Admin Tenant Management
 
-Super Admin can:
+Implemented the Super Admin frontend workflow.
+
+Super Admins can:
 
 - View tenants
 - Create tenants
@@ -152,9 +215,46 @@ Super Admin can:
 
 Tenant Admin and Sub User workflows remain separated from Super Admin functionality.
 
+## KH-041 — Tenant Document Workspace
+
+Implemented the tenant document workspace for frontend document operations, including:
+
+- Tenant-scoped document listing
+- PDF upload
+- Document status visibility
+- Document processing
+- Document download
+- Document status filtering
+- Processing and upload state handling
+
+## KH-042 — Frontend Workflow Integration Tests
+
+Added frontend workflow integration tests covering the major frontend API and workflow interactions.
+
+## Latest — Gemini Answer Generation
+
+Added Google Gemini as an additional answer-generation provider.
+
+The provider follows the same grounded-generation contract as the existing deterministic and OpenAI providers.
+
+The application can select the provider through:
+
+```env
+ANSWER_GENERATION_PROVIDER=gemini
+```
+
+with:
+
+```env
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-3.6-flash
+```
+
 ---
 
 # Product Roles
+
+KnowledgeHub is designed around three application roles.
 
 ## SUPER_ADMIN
 
@@ -164,12 +264,10 @@ Can:
 
 - Create tenants
 - List tenants
-- Access any tenant through authorized APIs
-- Manage users in any tenant
+- Access authorized tenant management workflows
+- Manage users across tenants
 - Create Tenant Admins
 - Create Sub Users
-
-The frontend provides a dedicated Super Admin tenant-management interface.
 
 ## TENANT_ADMIN
 
@@ -177,21 +275,23 @@ Administrator for one tenant.
 
 Can:
 
-- Access only their tenant
+- Access their own tenant
 - Upload PDF documents
 - Process documents
 - View tenant documents
+- Download authorized documents
 - Manage Sub Users
 - Create Sub Users
-- Activate/deactivate Sub Users
+- Activate Sub Users
+- Deactivate Sub Users
 - Ask questions against tenant knowledge
 
 Cannot:
 
-- Access another tenant
-- Create another Tenant Admin
-- Create a Super Admin
-- Manage users outside their tenant
+- Access another tenant's resources
+- Create another Super Admin
+- Create another Super Admin-level account
+- Manage users outside their authorized tenant
 
 ## SUB_USER
 
@@ -199,8 +299,8 @@ Regular tenant user.
 
 Can:
 
-- Access only their own tenant
-- View tenant documents
+- Access their own tenant
+- View authorized tenant documents
 - Download authorized tenant documents
 - Ask questions against tenant knowledge
 - Use persistent conversations
@@ -217,7 +317,7 @@ Cannot:
 
 # Architecture
 
-KnowledgeHub follows a layered architecture:
+KnowledgeHub follows a layered backend architecture.
 
 ```text
                     HTTP Request
@@ -226,12 +326,11 @@ KnowledgeHub follows a layered architecture:
                   FastAPI API Routes
                          │
                          ▼
-                Authentication /
-                  Authorization
+              Authentication / Authorization
                          │
                          ▼
                       Services
-                 Business Rules
+                  Business Rules
                          │
                          ▼
                    Repositories
@@ -244,7 +343,7 @@ KnowledgeHub follows a layered architecture:
                     PostgreSQL
 ```
 
-The RAG subsystem adds:
+The RAG subsystem extends this architecture:
 
 ```text
 User Question
@@ -264,9 +363,9 @@ Retrieved Document Chunks
      ▼
 Answer Generation Provider
      │
-     ├── Deterministic Provider
-     │
-     └── OpenAI Provider
+     ├── Deterministic
+     ├── OpenAI
+     └── Gemini
      │
      ▼
 Grounded Answer
@@ -357,6 +456,7 @@ KnowledgeHUB/
 │   └── workflows/
 │       └── ci.yml
 │
+├── Dockerfile
 ├── docker-compose.yml
 ├── requirements.txt
 └── README.md
@@ -433,13 +533,13 @@ Tenant Authorization
 Endpoint
 ```
 
-Unauthorized authenticated users receive:
+Authenticated users without sufficient permissions receive:
 
 ```text
 403 Forbidden
 ```
 
-The authorization layer includes:
+Authorization includes:
 
 - Role checks
 - Tenant ownership checks
@@ -457,7 +557,7 @@ For tenant-scoped resources:
 
 ```text
 SUPER_ADMIN
-    → may access any tenant
+    → authorized cross-tenant administration
 
 TENANT_ADMIN
     → own tenant only
@@ -466,9 +566,19 @@ SUB_USER
     → own tenant only
 ```
 
-The API never trusts a client-provided tenant or uploader identity without authorization validation.
+The API does not blindly trust tenant or uploader identities supplied by clients.
 
-Document retrieval, document listing, document processing, document downloading, semantic retrieval, RAG requests, and conversations are tenant scoped.
+Tenant-scoped validation is applied to:
+
+- Document listing
+- Document upload
+- Document processing
+- Document downloading
+- Document retrieval
+- Semantic retrieval
+- RAG requests
+- Conversations
+- Tenant user management
 
 Conversation persistence is additionally user scoped.
 
@@ -476,16 +586,15 @@ Conversation persistence is additionally user scoped.
 
 # Document Lifecycle
 
-Documents use:
+Documents use the following lifecycle:
 
 ```text
 UPLOADED
     │
-    ├──> PROCESSING
-    │       │
-    │       ├──> READY
-    │       │
-    │       └──> FAILED
+    ▼
+PROCESSING
+    │
+    ├──> READY
     │
     └──> FAILED
              │
@@ -498,7 +607,7 @@ Repeatedly applying the same status is idempotent.
 
 Invalid lifecycle transitions are rejected.
 
-Processing currently performs the document ingestion pipeline required by the RAG subsystem:
+Processing performs the ingestion pipeline:
 
 ```text
 PDF
@@ -518,7 +627,7 @@ Persisted Document Chunks
 
 ---
 
-# RAG
+# RAG Pipeline
 
 The current RAG pipeline is tenant safe.
 
@@ -541,26 +650,82 @@ Top-K Retrieved Chunks
 Similarity Threshold
    │
    ├── No relevant context
-   │       ↓
-   │    Abstain
+   │       │
+   │       ▼
+   │    Abstention
    │
    └── Relevant context
-           ↓
+           │
+           ▼
       Answer Provider
-           ↓
+           │
+           ▼
        Grounded Answer
 ```
 
-The answer-generation layer supports:
-
-- Deterministic local provider
-- OpenAI provider
-
-The OpenAI provider is configurable through environment settings.
-
 Retrieved document context is treated as the factual grounding source.
 
-Conversation history may be used for conversational continuity, but previous assistant responses are not treated as authoritative knowledge.
+Conversation history can be used to resolve conversational references such as:
+
+```text
+"it"
+"they"
+"that document"
+"the previous topic"
+```
+
+Previous assistant responses are not treated as authoritative knowledge.
+
+If the retrieved context does not contain enough information, the system abstains rather than inventing facts.
+
+---
+
+# Answer Generation Providers
+
+KnowledgeHub uses a provider abstraction for answer generation.
+
+## Deterministic Provider
+
+The deterministic provider:
+
+- Does not call an external AI service
+- Produces predictable output
+- Is useful for local development
+- Is useful for automated tests
+
+Configure:
+
+```env
+ANSWER_GENERATION_PROVIDER=deterministic
+```
+
+## OpenAI Provider
+
+The OpenAI provider uses the OpenAI API for answer generation.
+
+Configure:
+
+```env
+ANSWER_GENERATION_PROVIDER=openai
+
+OPENAI_API_KEY=your-api-key
+OPENAI_MODEL=your-model
+```
+
+## Gemini Provider
+
+The Gemini provider uses Google's Gemini API.
+
+Configure:
+
+```env
+ANSWER_GENERATION_PROVIDER=gemini
+
+GEMINI_API_KEY=your-api-key
+GEMINI_MODEL=gemini-3.6-flash
+```
+
+All providers follow the same grounded-answer contract.
 
 ---
 
@@ -578,7 +743,7 @@ Messages contain:
 - Role
 - Content
 - Timestamp
-- Persisted source metadata for assistant answers where applicable
+- Source metadata for applicable assistant responses
 
 The frontend provides:
 
@@ -586,11 +751,12 @@ The frontend provides:
 - New conversation
 - Conversation selection
 - Persistent message history
-- Source display for RAG answers
+- RAG question submission
+- Retrieved source display
 
 ---
 
-# Current APIs
+# Current API Surface
 
 ## Authentication
 
@@ -605,8 +771,6 @@ POST /tenants
 GET  /tenants
 GET  /tenants/{tenant_id}
 ```
-
-Tenant creation and tenant-wide listing are Super Admin operations.
 
 ## Tenant Users
 
@@ -628,7 +792,7 @@ POST  /documents/{tenant_id}/{document_id}/process
 PATCH /documents/{tenant_id}/{document_id}/status
 ```
 
-## Document Retrieval
+## Retrieval
 
 ```text
 GET /documents/{tenant_id}/retrieve?query=<query>&top_k=<n>
@@ -656,20 +820,17 @@ GET /health
 
 ---
 
-# Document Status Filtering
+# Document Filtering
 
-The document listing endpoint supports:
-
-```text
-GET /documents/{tenant_id}
-```
-
-or:
+Documents can be filtered by lifecycle status:
 
 ```text
 GET /documents/{tenant_id}?status=uploaded
+
 GET /documents/{tenant_id}?status=processing
+
 GET /documents/{tenant_id}?status=ready
+
 GET /documents/{tenant_id}?status=failed
 ```
 
@@ -693,21 +854,37 @@ alembic upgrade head
 
 ---
 
-# Local Setup
+# Local Development
 
-## 1. Clone
+## Prerequisites
+
+Install:
+
+- Python 3.12+
+- Node.js
+- npm
+- Docker Desktop
+- PostgreSQL, or use the provided Docker Compose setup
+
+---
+
+## 1. Clone the Repository
 
 ```bash
 git clone https://github.com/Aman-agnihotri-A/KnowledgeHUB.git
+
 cd KnowledgeHUB
 ```
 
-## 2. Create Python environment
+---
+
+## 2. Create Python Environment
 
 ### Windows PowerShell
 
 ```powershell
 python -m venv .venv
+
 .venv\Scripts\Activate.ps1
 ```
 
@@ -715,17 +892,23 @@ python -m venv .venv
 
 ```bash
 python -m venv .venv
+
 source .venv/bin/activate
 ```
 
-## 3. Install backend dependencies
+---
+
+## 3. Install Backend Dependencies
 
 ```bash
 python -m pip install --upgrade pip
+
 pip install -r requirements.txt
 ```
 
-## 4. Configure environment
+---
+
+## 4. Configure Environment
 
 Copy:
 
@@ -751,21 +934,41 @@ Copy-Item .env.example .env
 cp .env.example .env
 ```
 
-Configure the PostgreSQL connection and JWT settings.
+Configure the required database and JWT settings.
 
-If OpenAI generation is enabled, configure the OpenAI API key and model.
+For Gemini:
+
+```env
+ANSWER_GENERATION_PROVIDER=gemini
+GEMINI_API_KEY=your-api-key
+GEMINI_MODEL=gemini-3.6-flash
+```
+
+For OpenAI:
+
+```env
+ANSWER_GENERATION_PROVIDER=openai
+OPENAI_API_KEY=your-api-key
+OPENAI_MODEL=your-model
+```
+
+For local deterministic generation:
+
+```env
+ANSWER_GENERATION_PROVIDER=deterministic
+```
 
 ---
 
-# PostgreSQL
+# PostgreSQL with Docker
 
-Start the development database:
+Start the database:
 
 ```bash
-docker compose up -d
+docker compose up -d db
 ```
 
-Stop it:
+Stop the database:
 
 ```bash
 docker compose down
@@ -779,7 +982,7 @@ alembic upgrade head
 
 ---
 
-# Run Backend
+# Run the Backend
 
 ```bash
 uvicorn app.main:app --reload
@@ -791,7 +994,7 @@ Application:
 http://127.0.0.1:8000
 ```
 
-Swagger:
+Swagger documentation:
 
 ```text
 http://127.0.0.1:8000/docs
@@ -799,43 +1002,75 @@ http://127.0.0.1:8000/docs
 
 ---
 
-# Run Frontend
+# Run the Frontend
+
+From the frontend directory:
 
 ```bash
 cd frontend
+
 npm install
+
 npm run dev
 ```
 
-The Vite development server will display the frontend URL in the terminal.
+The Vite development server will display the frontend URL.
 
-If the backend is not served from the same origin, configure:
+The frontend API base URL can be configured through:
 
 ```text
-VITE_API_BASE_URL
+frontend/.env
 ```
 
-in the frontend environment.
+using:
+
+```env
+VITE_API_BASE_URL=http://127.0.0.1:8000
+```
+
+---
+
+# Docker
+
+The backend also includes a Dockerfile and Docker Compose development setup.
+
+Start the complete stack:
+
+```bash
+docker compose up --build
+```
+
+The API is exposed on:
+
+```text
+http://127.0.0.1:8000
+```
+
+The PostgreSQL database is exposed on:
+
+```text
+localhost:5432
+```
 
 ---
 
 # Testing
 
-## Backend
+## Backend Tests
 
-Run the complete backend suite:
+Run the complete backend test suite:
 
 ```bash
 python -m pytest -q
 ```
 
-Focused test:
+Run a focused test:
 
 ```bash
 python -m pytest tests/<test_file>.py -q
 ```
 
-The backend suite covers:
+The backend test suite covers areas including:
 
 - Authentication
 - JWT validation
@@ -849,7 +1084,7 @@ The backend suite covers:
 - Document storage
 - Document processing
 - Embeddings
-- Retrieval
+- Semantic retrieval
 - RAG
 - Abstention
 - Conversations
@@ -858,224 +1093,226 @@ The backend suite covers:
 - Database integration
 - Migration behavior
 
+## Frontend Tests
+
+From:
+
+```text
+frontend/
+```
+
+run:
+
+```bash
+npm test
+```
+
+## Frontend Production Build
+
+```bash
+npm run build
+```
+
+---
+
+# Continuous Integration
+
+GitHub Actions runs the backend test pipeline on pushes and pull requests targeting `main`.
+
+The CI workflow:
+
+1. Starts PostgreSQL 16
+2. Sets up Python 3.12
+3. Installs backend dependencies
+4. Runs Alembic migrations
+5. Executes the backend test suite
+
+The project therefore validates database migrations and backend tests in CI rather than relying only on local development.
+
+---
+
+# Security Principles
+
+KnowledgeHub is being developed around several security boundaries.
+
+## Authentication
+
+Every protected endpoint requires valid authentication.
+
+## Role Authorization
+
+Endpoints explicitly enforce the permissions associated with the authenticated user's role.
+
+## Tenant Isolation
+
+Tenant-scoped resources are validated against the authenticated user's authorized tenant.
+
+## User Ownership
+
+Conversation resources are additionally scoped to the authenticated user.
+
+## Server-Side Authorization
+
+The frontend is not considered a security boundary.
+
+Authorization decisions are enforced by the backend.
+
+## Secrets
+
+API keys and application secrets are supplied through environment configuration and are intentionally excluded from source control.
+
+---
+
+# Technology Stack
+
+## Backend
+
+- Python
+- FastAPI
+- SQLAlchemy
+- Alembic
+- PostgreSQL
+- Pydantic Settings
+- JWT
+- Pytest
+
+## RAG
+
+- PDF text extraction
+- Document chunking
+- Deterministic embeddings
+- Semantic retrieval
+- Grounded question answering
+- Conversation-aware retrieval
+- Configurable AI providers
+- OpenAI
+- Google Gemini
+
 ## Frontend
 
-From `frontend/`:
+- React
+- Vite
+- Vitest
+- Testing Library
 
-```bash
-npm test
-```
+## Infrastructure
 
-Run the production build:
-
-```bash
-npm run build
-```
-
-The frontend test suite covers the API client behavior and authentication/session handling.
+- Docker
+- Docker Compose
+- GitHub Actions
 
 ---
 
-# CI
+# Engineering Approach
 
-GitHub Actions runs the backend test suite on pushes and pull requests targeting `main`.
+The project is intentionally being developed incrementally instead of building the entire application in one step.
 
-The CI pipeline:
+The development process emphasizes:
 
-1. Starts PostgreSQL.
-2. Installs Python.
-3. Installs dependencies.
-4. Runs Alembic migrations.
-5. Runs pytest.
+- Small implementation increments
+- Layered architecture
+- Explicit domain boundaries
+- Repository/service separation
+- Database migrations
+- Automated tests
+- CI validation
+- Authentication before authorization
+- Authorization before tenant-scoped functionality
+- Backend-enforced security
+- Provider abstraction
+- Frontend/backend contract testing
+- Incremental frontend integration
 
-Frontend validation is also part of local sprint completion:
-
-```bash
-cd frontend
-npm test
-npm run build
-```
-
-A sprint is considered complete only after the relevant backend tests, frontend tests, frontend build, and affected workflow have been verified locally.
+The sprint history in this README reflects the implementation sequence used during development.
 
 ---
 
-# Security Rules
+# Roadmap
 
-Current security semantics:
+The project is still under active development.
+
+Planned areas include:
+
+- End-to-end frontend workflow validation
+- RAG workflow hardening
+- Improved document processing reliability
+- Production-grade background processing
+- Better observability
+- More comprehensive integration testing
+- Deployment configuration
+- Production security hardening
+- Additional AI provider improvements
+- Improved document and conversation UX
+
+---
+
+# Project Status
+
+KnowledgeHub has progressed from a backend foundation into a working multi-tenant RAG application with a React frontend.
+
+The major architectural building blocks are now in place:
 
 ```text
-Missing / invalid JWT
-        ↓
-401 Unauthorized
-
-Authenticated but unauthorized
-        ↓
-403 Forbidden
-
-Authenticated and authorized
-        ↓
-Endpoint executes
+Authentication
+      │
+      ▼
+Authorization
+      │
+      ▼
+Tenant Isolation
+      │
+      ▼
+Document Management
+      │
+      ▼
+Document Processing
+      │
+      ▼
+Embeddings
+      │
+      ▼
+Semantic Retrieval
+      │
+      ▼
+Grounded RAG
+      │
+      ▼
+Persistent Conversations
+      │
+      ▼
+AI Answer Generation
+      │
+      ▼
+React Frontend
 ```
 
-Important rules:
-
-- Never trust a client-provided uploader identity.
-- Never trust a tenant identifier without authorization validation.
-- Never return another tenant's documents.
-- Never allow a Sub User to manage tenant users.
-- Never allow a Tenant Admin to manage another tenant.
-- Conversation access is restricted to the owning tenant user.
-- RAG retrieval is tenant scoped.
-- RAG only retrieves chunks from READY documents.
-- Grounded answer generation must not invent knowledge outside retrieved context.
+The project is currently in the integration and hardening phase rather than being presented as a finished production product.
 
 ---
 
-# Frontend Role Experience
+# Author
 
-## Super Admin
+**Aman Agnihotri**
 
-Dedicated tenant-management interface:
+Backend/Python developer building KnowledgeHub as a hands-on production-oriented software engineering project.
 
-```text
-Tenant Management
-├── Create Tenant
-├── Tenant List
-└── Selected Tenant
-    └── User Management
-        ├── Create Tenant Admin
-        ├── Create Sub User
-        ├── Activate User
-        └── Deactivate User
-```
+The project is being used to explore:
 
-## Tenant Admin
-
-```text
-KnowledgeHub
-├── Documents
-│   ├── Upload PDF
-│   ├── Process
-│   └── Document status
-├── Tenant Users
-│   ├── Create Sub User
-│   ├── Activate
-│   └── Deactivate
-└── RAG Conversations
-```
-
-## Sub User
-
-```text
-KnowledgeHub
-├── Documents
-└── RAG Conversations
-```
-
-Tenant User Management controls are not exposed to Sub Users.
+- Multi-tenant SaaS architecture
+- Backend engineering
+- RAG systems
+- AI provider abstraction
+- Secure authorization
+- PostgreSQL data modeling
+- API design
+- React integration
+- Automated testing
+- CI/CD practices
 
 ---
 
-# Current Scope
+# License
 
-KnowledgeHub has progressed beyond the initial authentication and CRUD foundation.
+This project is currently a personal development project.
 
-The current implementation now includes the core product loop:
-
-```text
-Tenant
-  │
-  ├── Users
-  │
-  └── Documents
-        │
-        ▼
-     Processing
-        │
-        ▼
-      Chunks
-        │
-        ▼
-    Embeddings
-        │
-        ▼
-     Retrieval
-        │
-        ▼
-   Grounded RAG
-        │
-        ▼
-  Conversations
-```
-
-The frontend provides role-aware access to the major product capabilities.
-
----
-
-# Intentionally Deferred / Future Work
-
-The following capabilities are not yet part of the completed implementation:
-
-- Refresh tokens
-- Token revocation / server-side logout
-- Background document-processing workers
-- Asynchronous job queues
-- Production vector database integration
-- Advanced hybrid retrieval
-- Reranking
-- Citation-quality evaluation
-- RAG evaluation datasets
-- Rate limiting
-- Advanced observability
-- Metrics and tracing
-- Audit logging
-- Fine-grained permission tables
-- Production object storage
-- Multi-file bulk ingestion
-- Production deployment infrastructure
-- Automated end-to-end browser testing
-- CI frontend test/build enforcement
-- Advanced administrative analytics
-
-These should be introduced only after their prerequisites are implemented and validated.
-
----
-
-# Engineering Principles
-
-KnowledgeHub is intentionally being built with production-oriented practices.
-
-Key principles:
-
-- One complete sprint at a time
-- Inspect the existing implementation before changing it
-- Preserve working architecture
-- Keep business rules in services
-- Keep database access in repositories
-- Keep authentication/authorization in dependencies
-- Keep tenant isolation explicit
-- Test behavior rather than implementation details
-- Prefer deterministic local behavior for tests
-- Keep external AI providers configurable
-- Validate locally before pushing to GitHub
-- Keep GitHub as the source-of-reference for the shared project state
-- Do not introduce speculative infrastructure before the application requires it
-
----
-
-# Project Goal
-
-The long-term goal is to evolve KnowledgeHub into a production-oriented multi-tenant AI knowledge platform where:
-
-- Super Admins manage tenants.
-- Tenant Admins manage their organization's knowledge and users.
-- Sub Users consume approved tenant knowledge.
-- Documents are securely processed and indexed.
-- Retrieval is tenant isolated.
-- Answers are grounded in tenant-provided knowledge.
-- Conversations preserve useful context.
-- AI providers can be replaced without rewriting the application.
-- The system can eventually support production-scale asynchronous processing, observability, evaluation, and deployment.
-
-The RAG subsystem is a core capability of KnowledgeHub, but it is not the entire product.
+A formal open-source license has not yet been added.

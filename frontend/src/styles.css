@@ -889,3 +889,20 @@ button:disabled {
   font-size: 12px;
   color: #6f4a4a;
 }
+.danger-button {
+  padding: 9px 12px;
+  border: 1px solid #d99a9a;
+  border-radius: 8px;
+  background: #fff5f5;
+  color: #a52a2a;
+  cursor: pointer;
+}
+
+.danger-button:hover:not(:disabled) {
+  background: #ffe8e8;
+}
+
+.danger-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}

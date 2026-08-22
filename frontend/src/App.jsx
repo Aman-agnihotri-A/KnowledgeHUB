@@ -8,6 +8,7 @@ import {
   clearSession,
   createConversation,
   createTenantUser,
+  deleteDocument,
   downloadDocument,
   getConversation,
   getSession,
@@ -313,6 +314,9 @@ function DocumentManager({
   const [downloadingId, setDownloadingId] =
     useState(null);
 
+  const [deletingId, setDeletingId] =
+    useState(null);
+
   const [error, setError] =
     useState("");
 
@@ -473,6 +477,46 @@ function DocumentManager({
       );
     } finally {
       setDownloadingId(null);
+    }
+  }
+    async function handleDelete(
+    document,
+  ) {
+    const confirmed =
+      window.confirm(
+        `Delete "${document.filename}"? This will permanently remove the document and its processed knowledge chunks.`,
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingId(
+      document.id,
+    );
+
+    setError("");
+
+    try {
+      await deleteDocument(
+        session.tenantId,
+        document.id,
+      );
+
+      setDocuments(
+        (current) =>
+          current.filter(
+            (item) =>
+              item.id !== document.id,
+          ),
+      );
+    } catch (err) {
+      setError(
+        err.message ||
+          "Unable to delete document.",
+      );
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -639,6 +683,25 @@ function DocumentManager({
                       ? "Downloading..."
                       : "Download"}
                   </button>
+                  {session.role ===
+                    "tenant_admin" && (
+                    <button
+                      type="button"
+                      className="danger-button"
+                      onClick={() =>
+                        handleDelete(document)
+                      }
+                      disabled={
+                        deletingId ===
+                        document.id
+                      }
+                    >
+                      {deletingId ===
+                      document.id
+                        ? "Deleting..."
+                        : "Delete"}
+                    </button>
+                  )}
 
                   {session.role ===
                     "tenant_admin" &&
@@ -663,6 +726,7 @@ function DocumentManager({
                           : "Process"}
                       </button>
                     )}
+                    
                 </div>
               </article>
             ),
