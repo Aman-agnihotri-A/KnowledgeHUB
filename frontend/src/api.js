@@ -247,9 +247,14 @@ export async function askQuestion(
 }
 export async function listDocuments(
   tenantId,
+  status = null,
 ) {
+  const query = status
+    ? `?status=${encodeURIComponent(status)}`
+    : "";
+
   return request(
-    `/documents/${tenantId}`,
+    `/documents/${tenantId}${query}`,
   );
 }
 
@@ -337,6 +342,100 @@ export async function processDocument(
       method: "POST",
     },
   );
+}
+
+export async function downloadDocument(
+  tenantId,
+  documentId,
+) {
+  const session =
+    getStoredSession();
+
+  const headers = new Headers();
+
+  if (session?.accessToken) {
+    headers.set(
+      "Authorization",
+      `Bearer ${session.accessToken}`,
+    );
+  }
+
+  const response = await fetch(
+    `${API_BASE_URL}/documents/${tenantId}/${documentId}/download`,
+    {
+      method: "GET",
+      headers,
+    },
+  );
+
+  if (response.status === 401) {
+    clearSession();
+
+    throw new Error(
+      "Your session has expired. Please log in again.",
+    );
+  }
+
+  if (!response.ok) {
+    let message =
+      "Unable to download document.";
+
+    try {
+      const body =
+        await response.json();
+
+      if (
+        typeof body.detail ===
+        "string"
+      ) {
+        message = body.detail;
+      }
+    } catch {
+      // Keep default error.
+    }
+
+    throw new Error(message);
+  }
+
+  const blob =
+    await response.blob();
+
+  const disposition =
+    response.headers.get(
+      "Content-Disposition",
+    );
+
+  let filename =
+    "knowledgehub-document";
+
+  const match =
+    disposition?.match(
+      /filename="?([^"]+)"?/i,
+    );
+
+  if (match?.[1]) {
+    filename = match[1];
+  }
+
+  const url =
+    URL.createObjectURL(blob);
+
+  const anchor =
+    window.document.createElement(
+      "a",
+    );
+
+  anchor.href = url;
+  anchor.download = filename;
+
+  window.document.body.appendChild(
+    anchor,
+  );
+
+  anchor.click();
+  anchor.remove();
+
+  URL.revokeObjectURL(url);
 }
 
 export async function listTenantUsers(

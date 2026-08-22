@@ -826,3 +826,47 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 }
+
+.document-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 14px;
+}
+
+.document-toolbar label {
+  display: grid;
+  gap: 6px;
+  min-width: 180px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.document-toolbar select {
+  padding: 9px 11px;
+  border: 1px solid #d6dce7;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #172033;
+}
+
+.document-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 760px) {
+  .document-toolbar {
+    justify-content: stretch;
+  }
+
+  .document-toolbar label {
+    width: 100%;
+  }
+
+  .document-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+}

@@ -8,6 +8,7 @@ import {
   clearSession,
   createConversation,
   createTenantUser,
+  downloadDocument,
   getConversation,
   getSession,
   listConversations,
@@ -289,8 +290,15 @@ function DocumentManager({
   const [documents, setDocuments] =
     useState([]);
 
-  const [selectedFile, setSelectedFile] =
-    useState(null);
+  const [
+    selectedFile,
+    setSelectedFile,
+  ] = useState(null);
+
+  const [
+    statusFilter,
+    setStatusFilter,
+  ] = useState("");
 
   const [loading, setLoading] =
     useState(true);
@@ -301,10 +309,15 @@ function DocumentManager({
   const [processingId, setProcessingId] =
     useState(null);
 
+  const [downloadingId, setDownloadingId] =
+    useState(null);
+
   const [error, setError] =
     useState("");
 
-  async function loadDocuments() {
+  async function loadDocuments(
+    filter = statusFilter,
+  ) {
     setLoading(true);
     setError("");
 
@@ -312,6 +325,7 @@ function DocumentManager({
       const result =
         await listDocuments(
           session.tenantId,
+          filter || null,
         );
 
       setDocuments(result);
@@ -326,15 +340,21 @@ function DocumentManager({
   }
 
   useEffect(() => {
-    loadDocuments();
-  }, [session.tenantId]);
+    loadDocuments(statusFilter);
+  }, [
+    session.tenantId,
+    statusFilter,
+  ]);
 
   async function handleUpload(
     event,
   ) {
     event.preventDefault();
 
-    if (!selectedFile || uploading) {
+    if (
+      !selectedFile ||
+      uploading
+    ) {
       return;
     }
 
@@ -358,31 +378,31 @@ function DocumentManager({
     try {
       const uploadedDocument =
         await uploadDocument(
-            session.tenantId,
-            selectedFile,
+          session.tenantId,
+          selectedFile,
         );
 
       setDocuments(
         (current) => [
-            uploadedDocument,
-            ...current,
+          uploadedDocument,
+          ...current,
         ],
-        );
+      );
 
-        setSelectedFile(null);
+      setSelectedFile(null);
 
-        const fileInput =
+      const fileInput =
         window.document.querySelector(
-            "#document-upload-input",
+          "#document-upload-input",
         );
 
-        if (fileInput) {
+      if (fileInput) {
         fileInput.value = "";
-        }
+      }
 
-        await handleProcess(
+      await handleProcess(
         uploadedDocument,
-        );
+      );
     } catch (err) {
       setError(
         err.message ||
@@ -411,10 +431,12 @@ function DocumentManager({
 
       setDocuments(
         (current) =>
-          current.map((item) =>
-            item.id === processed.id
-              ? processed
-              : item,
+          current.map(
+            (item) =>
+              item.id ===
+              processed.id
+                ? processed
+                : item,
           ),
       );
     } catch (err) {
@@ -429,11 +451,37 @@ function DocumentManager({
     }
   }
 
+  async function handleDownload(
+    document,
+  ) {
+    setDownloadingId(
+      document.id,
+    );
+
+    setError("");
+
+    try {
+      await downloadDocument(
+        session.tenantId,
+        document.id,
+      );
+    } catch (err) {
+      setError(
+        err.message ||
+          "Unable to download document.",
+      );
+    } finally {
+      setDownloadingId(null);
+    }
+  }
+
   return (
     <section className="documents-panel">
       <div className="documents-header">
         <div>
-          <h2>Documents</h2>
+          <h2>
+            Documents
+          </h2>
 
           <p className="muted">
             Documents available to
@@ -444,7 +492,9 @@ function DocumentManager({
         <button
           type="button"
           className="secondary-button"
-          onClick={loadDocuments}
+          onClick={() =>
+            loadDocuments()
+          }
           disabled={loading}
         >
           Refresh
@@ -494,6 +544,42 @@ function DocumentManager({
         </form>
       )}
 
+      <div className="document-toolbar">
+        <label>
+          Status
+
+          <select
+            value={statusFilter}
+            onChange={(event) =>
+              setStatusFilter(
+                event.target.value,
+              )
+            }
+            disabled={loading}
+          >
+            <option value="">
+              All statuses
+            </option>
+
+            <option value="uploaded">
+              Uploaded
+            </option>
+
+            <option value="processing">
+              Processing
+            </option>
+
+            <option value="ready">
+              Ready
+            </option>
+
+            <option value="failed">
+              Failed
+            </option>
+          </select>
+        </label>
+      </div>
+
       {error && (
         <div className="error-banner">
           {error}
@@ -505,10 +591,11 @@ function DocumentManager({
           <p className="document-empty">
             Loading documents...
           </p>
-        ) : documents.length === 0 ? (
+        ) : documents.length ===
+          0 ? (
           <p className="document-empty">
-            No documents have been
-            uploaded yet.
+            No documents found for
+            this filter.
           </p>
         ) : (
           documents.map(
@@ -519,38 +606,63 @@ function DocumentManager({
               >
                 <div className="document-info">
                   <strong>
-                    {document.filename}
+                    {
+                      document.filename
+                    }
                   </strong>
 
                   <span>
                     Status:{" "}
-                    {document.status}
+                    {
+                      document.status
+                    }
                   </span>
                 </div>
 
-                {session.role ===
-                  "tenant_admin" &&
-                  document.status !==
-                    "ready" && (
-                    <button
-                      type="button"
-                      className="secondary-button"
-                      onClick={() =>
-                        handleProcess(
-                          document,
-                        )
-                      }
-                      disabled={
-                        processingId ===
-                        document.id
-                      }
-                    >
-                      {processingId ===
+                <div className="document-actions">
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() =>
+                      handleDownload(
+                        document,
+                      )
+                    }
+                    disabled={
+                      downloadingId ===
                       document.id
-                        ? "Processing..."
-                        : "Process"}
-                    </button>
-                  )}
+                    }
+                  >
+                    {downloadingId ===
+                    document.id
+                      ? "Downloading..."
+                      : "Download"}
+                  </button>
+
+                  {session.role ===
+                    "tenant_admin" &&
+                    document.status !==
+                      "ready" && (
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() =>
+                          handleProcess(
+                            document,
+                          )
+                        }
+                        disabled={
+                          processingId ===
+                          document.id
+                        }
+                      >
+                        {processingId ===
+                        document.id
+                          ? "Processing..."
+                          : "Process"}
+                      </button>
+                    )}
+                </div>
               </article>
             ),
           )

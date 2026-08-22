@@ -17,6 +17,7 @@ import {
   clearSession,
   getSession,
   login,
+  downloadDocument,
   createTenant,
   listTenants,
   createTenantUser,
@@ -29,6 +30,199 @@ describe("frontend API client", () => {
     sessionStorage.clear();
     vi.restoreAllMocks();
   });
+
+  it("lists documents using a status filter", async () => {
+  const token =
+    createTestJwt({
+      sub: "admin-1",
+      role: "tenant_admin",
+      tenant_id: "tenant-1",
+    });
+
+  sessionStorage.setItem(
+    "knowledgehub_session",
+    JSON.stringify({
+      accessToken: token,
+      tokenType: "bearer",
+      userId: "admin-1",
+      role: "tenant_admin",
+      tenantId: "tenant-1",
+    }),
+  );
+
+  const fetchMock =
+    vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify([
+          {
+            id: "document-1",
+            tenant_id: "tenant-1",
+            filename: "guide.pdf",
+            status: "ready",
+          },
+        ]),
+        {
+          status: 200,
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+        },
+      ),
+    );
+
+  vi.stubGlobal(
+    "fetch",
+    fetchMock,
+  );
+
+  const result =
+    await listDocuments(
+      "tenant-1",
+      "ready",
+    );
+
+  expect(result).toHaveLength(1);
+
+  expect(
+    fetchMock,
+  ).toHaveBeenCalledWith(
+    "/documents/tenant-1?status=ready",
+    expect.objectContaining({
+      headers:
+        expect.any(Headers),
+    }),
+  );
+});
+
+it("downloads a tenant document using the authenticated session", async () => {
+  const token =
+    createTestJwt({
+      sub: "user-1",
+      role: "sub_user",
+      tenant_id: "tenant-1",
+    });
+
+  sessionStorage.setItem(
+    "knowledgehub_session",
+    JSON.stringify({
+      accessToken: token,
+      tokenType: "bearer",
+      userId: "user-1",
+      role: "sub_user",
+      tenantId: "tenant-1",
+    }),
+  );
+
+  const blob =
+    new Blob(
+      ["KnowledgeHub document"],
+      {
+        type: "application/pdf",
+      },
+    );
+
+  const fetchMock =
+    vi.fn().mockResolvedValue(
+      new Response(blob, {
+        status: 200,
+        headers: {
+          "Content-Type":
+            "application/pdf",
+          "Content-Disposition":
+            'attachment; filename="guide.pdf"',
+        },
+      }),
+    );
+
+  vi.stubGlobal(
+    "fetch",
+    fetchMock,
+  );
+
+  const createObjectUrl =
+    vi.fn().mockReturnValue(
+      "blob:test",
+    );
+
+  const revokeObjectUrl =
+    vi.fn();
+
+  vi.spyOn(
+    URL,
+    "createObjectURL",
+    ).mockReturnValue(
+    "blob:test",
+    );
+
+    vi.spyOn(
+    URL,
+    "revokeObjectURL",
+    ).mockImplementation(
+    () => {},
+    );
+
+  const appendChild =
+    document.body.appendChild;
+
+  const remove =
+    vi.fn();
+
+  const click =
+    vi.fn();
+
+  vi.spyOn(
+    document,
+    "createElement",
+  ).mockReturnValue({
+    href: "",
+    download: "",
+    click,
+    remove,
+  });
+
+  await downloadDocument(
+    "tenant-1",
+    "document-1",
+  );
+
+  expect(
+    fetchMock,
+  ).toHaveBeenCalledWith(
+    "/documents/tenant-1/document-1/download",
+    expect.objectContaining({
+      method: "GET",
+      headers:
+        expect.any(Headers),
+    }),
+  );
+
+  expect(
+    fetchMock.mock.calls[0][1]
+      .headers.get(
+        "Authorization",
+      ),
+  ).toBe(
+    `Bearer ${token}`,
+  );
+
+  expect(
+    createObjectUrl,
+  ).toHaveBeenCalledWith(
+    blob,
+  );
+
+  expect(click).toHaveBeenCalled();
+
+  expect(
+    revokeObjectUrl,
+  ).toHaveBeenCalledWith(
+    "blob:test",
+  );
+
+  document.body.appendChild =
+    appendChild;
+});
 
   it("lists tenants for a Super Admin", async () => {
   const token =
