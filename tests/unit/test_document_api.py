@@ -12,9 +12,9 @@ from fastapi.testclient import TestClient
 
 from app.api.documents import (
     document_service,
-    rag_service,
     retrieval_service,
 )
+from app.api.rag import rag_service
 from app.core.security import create_access_token
 from app.main import app
 from app.models.enums import UserRole, DocumentStatus
@@ -1938,7 +1938,7 @@ def test_ask_question_requires_authentication():
     tenant_id = uuid4()
 
     response = client.post(
-        f"/documents/{tenant_id}/ask",
+        f"/rag/{tenant_id}/ask",
         json={
             "question": "What is KnowledgeHub?",
         },
@@ -1958,7 +1958,7 @@ def test_ask_question_rejects_cross_tenant_access():
 
     try:
         response = client.post(
-            f"/documents/{requested_tenant_id}/ask",
+            f"/rag/{requested_tenant_id}/ask",
             json={
                 "question": "What is KnowledgeHub?",
             },
@@ -1988,7 +1988,7 @@ def test_ask_question_rejects_whitespace_question():
 
     try:
         response = client.post(
-            f"/documents/{tenant_id}/ask",
+            f"/rag/{tenant_id}/ask",
             json={
                 "question": "   ",
             },
@@ -2042,7 +2042,7 @@ def test_ask_question_returns_grounded_answer():
 
     try:
         response = client.post(
-            f"/documents/{tenant_id}/ask",
+            f"/rag/{tenant_id}/ask",
             json={
                 "question": "What is KnowledgeHub?",
                 "top_k": 3,
@@ -2120,7 +2120,7 @@ def test_ask_question_can_abstain():
 
     try:
         response = client.post(
-            f"/documents/{tenant_id}/ask",
+            f"/rag/{tenant_id}/ask",
             json={
                 "question": "Unknown question",
             },
@@ -2175,7 +2175,7 @@ def test_ask_question_persists_to_existing_conversation():
 
     try:
         response = client.post(
-            f"/documents/{tenant_id}/ask",
+            f"/rag/{tenant_id}/ask",
             json={
                 "question": "What is KnowledgeHub?",
                 "top_k": 3,
@@ -2230,7 +2230,7 @@ def test_ask_question_rejects_inaccessible_conversation():
 
     try:
         response = client.post(
-            f"/documents/{tenant_id}/ask",
+            f"/rag/{tenant_id}/ask",
             json={
                 "question": "What is KnowledgeHub?",
                 "conversation_id": str(
@@ -2273,7 +2273,7 @@ def test_ask_question_without_conversation_is_backward_compatible():
 
     try:
         response = client.post(
-            f"/documents/{tenant_id}/ask",
+            f"/rag/{tenant_id}/ask",
             json={
                 "question": "What is KnowledgeHub?",
             },
